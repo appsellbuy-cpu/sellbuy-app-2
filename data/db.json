@@ -1,0 +1,359 @@
+{
+  "properties": [
+    {
+      "id": "prop-1789609258989",
+      "title": "Modern Horizon Villa",
+      "location": "Canggu, Bali",
+      "price": 1480000,
+      "category": "house",
+      "beds": 4,
+      "baths": 4,
+      "sqft": 3100,
+      "image": "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1600&auto=format&fit=crop",
+      "gallery": [
+        "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1600&auto=format&fit=crop"
+      ],
+      "description": "Stunning contemporary villa.",
+      "featured": false,
+      "ownerId": "user-default",
+      "ownerName": "Alexander Wright",
+      "createdAt": "2026-09-17T01:40:58.989Z",
+      "status": "active",
+      "amenities": [
+        "Modern Architecture",
+        "High Ceilings",
+        "Premium Location",
+        "Energy Efficient"
+      ]
+    },
+    {
+      "id": "prop-1",
+      "title": "Seaside Villa",
+      "location": "Bali, Indonesia",
+      "price": 1250000,
+      "category": "house",
+      "beds": 4,
+      "baths": 3,
+      "sqft": 2400,
+      "image": "https://images.unsplash.com/photo-1613490493576-7fde63acd811?q=80&w=1600&auto=format&fit=crop",
+      "gallery": [
+        "https://images.unsplash.com/photo-1613490493576-7fde63acd811?q=80&w=1600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?q=80&w=1600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?q=80&w=1600&auto=format&fit=crop"
+      ],
+      "description": "A breathtaking contemporary oceanfront sanctuary featuring seamless indoor-outdoor living, infinity edge pool overlooking the Indian Ocean, handcrafted teak finishes, and expansive floor-to-ceiling glass pavilions.",
+      "featured": true,
+      "ownerId": "agent-1",
+      "ownerName": "Emma Johnson",
+      "createdAt": "2025-01-15T10:00:00Z",
+      "status": "active",
+      "amenities": [
+        "Private Infinity Pool",
+        "Direct Beach Access",
+        "Smart Home Integration",
+        "Wine Cellar",
+        "Chef Kitchen",
+        "2-Car Garage",
+        "Private Security"
+      ]
+    },
+    {
+      "id": "prop-2",
+      "title": "Urban Loft",
+      "location": "New York, USA",
+      "price": 950000,
+      "category": "apartment",
+      "beds": 2,
+      "baths": 2,
+      "sqft": 1200,
+      "image": "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?q=80&w=1600&auto=format&fit=crop",
+      "gallery": [
+        "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?q=80&w=1600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?q=80&w=1600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1560185127-6ed189bf02f4?q=80&w=1600&auto=format&fit=crop"
+      ],
+      "description": "An impeccably restored industrial loft in Manhattan boasting 14-foot exposed beamed ceilings, authentic exposed brick, polished concrete floors, custom Italian kitchen cabinetry, and oversized southern-exposure arched windows.",
+      "featured": true,
+      "ownerId": "agent-2",
+      "ownerName": "Liam Smit",
+      "createdAt": "2025-02-01T12:30:00Z",
+      "status": "active",
+      "amenities": [
+        "Concierge Service",
+        "Rooftop Lounge",
+        "Fitness Studio",
+        "Bicycle Storage",
+        "Floor-to-Ceiling Windows",
+        "In-Unit Washer/Dryer"
+      ]
+    },
+    {
+      "id": "prop-3",
+      "title": "Mountain Retreat",
+      "location": "Colorado, USA",
+      "price": 780000,
+      "category": "house",
+      "beds": 3,
+      "baths": 2,
+      "sqft": 1800,
+      "image": "https://images.unsplash.com/photo-1518780664697-55e3ad937233?q=80&w=1600&auto=format&fit=crop",
+      "gallery": [
+        "https://images.unsplash.com/photo-1518780664697-55e3ad937233?q=80&w=1600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?q=80&w=1600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1600585154526-990dced4db0d?q=80&w=1600&auto=format&fit=crop"
+      ],
+      "description": "Nestled amidst soaring evergreen pines, this timber and fieldstone chalet delivers alpine luxury. Features radiant floor heating, stone hearth fireplace, panoramic mountain viewing deck, and heated ski storage.",
+      "featured": true,
+      "ownerId": "agent-3",
+      "ownerName": "Sophia Williams",
+      "createdAt": "2025-02-10T14:15:00Z",
+      "status": "active",
+      "amenities": [
+        "Heated Cedar Hot Tub",
+        "Fieldstone Fireplace",
+        "Ski-in / Ski-out Access",
+        "Heated Garage",
+        "Wrap-around Deck"
+      ]
+    },
+    {
+      "id": "prop-4",
+      "title": "City Penthouse",
+      "location": "Dubai, UAE",
+      "price": 2100000,
+      "category": "apartment",
+      "beds": 3,
+      "baths": 3,
+      "sqft": 2700,
+      "image": "https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?q=80&w=1600&auto=format&fit=crop",
+      "gallery": [
+        "https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?q=80&w=1600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?q=80&w=1600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?q=80&w=1600&auto=format&fit=crop"
+      ],
+      "description": "An ultra-luxurious full-floor penthouse soaring above Downtown Dubai. Unobstructed skyline and canal panoramas, private plunge pool terrace, Calacatta marble interiors, and bespoke designer lighting throughout.",
+      "featured": true,
+      "ownerId": "agent-4",
+      "ownerName": "Noah Brown",
+      "createdAt": "2025-02-18T09:00:00Z",
+      "status": "active",
+      "amenities": [
+        "Private Elevator Entry",
+        "Plunge Pool",
+        "24/7 Butler Concierge",
+        "Valet Parking",
+        "Private Spa Access",
+        "Helipad Access"
+      ]
+    },
+    {
+      "id": "prop-5",
+      "title": "Sunset Cliff Villa",
+      "location": "Santorini, Greece",
+      "price": 1890000,
+      "category": "house",
+      "beds": 4,
+      "baths": 4,
+      "sqft": 3200,
+      "image": "https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?q=80&w=1600&auto=format&fit=crop",
+      "gallery": [
+        "https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?q=80&w=1600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1533105079780-92b9be482077?q=80&w=1600&auto=format&fit=crop"
+      ],
+      "description": "Cycladic architectural masterpiece perched on the Oia caldera. Whitewashed sculptural curves, private infinity pool melting into the Aegean Sea, wine tasting cave, and sunset views praised worldwide.",
+      "featured": false,
+      "ownerId": "agent-1",
+      "ownerName": "Emma Johnson",
+      "createdAt": "2025-02-22T11:00:00Z",
+      "status": "active",
+      "amenities": [
+        "Caldera Views",
+        "Infinity Pool",
+        "Cave Cellar",
+        "Outdoor Dining Pergola",
+        "Solar Powered"
+      ]
+    },
+    {
+      "id": "prop-6",
+      "title": "Alpine Meadow Panoramic Plot",
+      "location": "Aspen, Colorado, USA",
+      "price": 640000,
+      "category": "plot",
+      "beds": 0,
+      "baths": 0,
+      "sqft": 45000,
+      "image": "https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1600&auto=format&fit=crop",
+      "gallery": [
+        "https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=1600&auto=format&fit=crop"
+      ],
+      "description": "A rare 1.03-acre pristine residential building plot with grandfathered architectural permits for up to a 6,500 sqft estate. Unrivaled uninterrupted views of snowcapped continental divide peaks with road and utility hookups already completed.",
+      "featured": false,
+      "ownerId": "agent-3",
+      "ownerName": "Sophia Williams",
+      "createdAt": "2025-02-25T15:00:00Z",
+      "status": "active",
+      "amenities": [
+        "Permits Approved",
+        "Underground Utilities",
+        "Private Road Access",
+        "Stream Boundary",
+        "Mountain Views"
+      ]
+    },
+    {
+      "id": "prop-7",
+      "title": "Skyline Grand Residence",
+      "location": "London, UK",
+      "price": 1650000,
+      "category": "apartment",
+      "beds": 3,
+      "baths": 2,
+      "sqft": 1650,
+      "image": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?q=80&w=1600&auto=format&fit=crop",
+      "gallery": [
+        "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?q=80&w=1600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1502005229762-ee1b2da975e6?q=80&w=1600&auto=format&fit=crop"
+      ],
+      "description": "Overlooking Hyde Park in prime Knightsbridge. Elegant herringbone oak parquet, bespoke handcrafted joinery, Marble-clad master suite, and private resident wellness club.",
+      "featured": false,
+      "ownerId": "agent-2",
+      "ownerName": "Liam Smit",
+      "createdAt": "2025-03-01T08:30:00Z",
+      "status": "active",
+      "amenities": [
+        "Park Views",
+        "24h Porter",
+        "Resident Spa & Pool",
+        "Secure Underground Parking"
+      ]
+    },
+    {
+      "id": "prop-8",
+      "title": "Azure Bayfront Development Plot",
+      "location": "Algarve, Portugal",
+      "price": 490000,
+      "category": "plot",
+      "beds": 0,
+      "baths": 0,
+      "sqft": 32000,
+      "image": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1600&auto=format&fit=crop",
+      "gallery": [
+        "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1600&auto=format&fit=crop"
+      ],
+      "description": "Elevated coastal parcel with direct southwestern ocean views and pre-approved zoning for a luxury contemporary villa with infinity pool. Walk to secluded golden coves in under 5 minutes.",
+      "featured": false,
+      "ownerId": "agent-4",
+      "ownerName": "Noah Brown",
+      "createdAt": "2025-03-03T10:00:00Z",
+      "status": "active",
+      "amenities": [
+        "Coastal Zoning",
+        "South-Facing Orientation",
+        "Direct Beach Trail",
+        "Architectural Drafts Included"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "id": "user-default",
+      "name": "Alexander Wright",
+      "email": "appsellbuy@gmail.com",
+      "role": "agent",
+      "phone": "+1 (555) 019-2834",
+      "passwordHash": "password123",
+      "avatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=400&auto=format&fit=crop"
+    },
+    {
+      "id": "user-demo",
+      "name": "Eleanor Vance",
+      "email": "eleanor@navikx.com",
+      "role": "user",
+      "phone": "+1 (555) 789-1020",
+      "passwordHash": "password123",
+      "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=400&auto=format&fit=crop"
+    }
+  ],
+  "bookings": [
+    {
+      "id": "book-1789609255383",
+      "propertyId": "prop-1",
+      "propertyTitle": "Seaside Villa",
+      "propertyLocation": "Bali, Indonesia",
+      "propertyImage": "https://images.unsplash.com/photo-1613490493576-7fde63acd811?q=80&w=1600&auto=format&fit=crop",
+      "propertyPrice": 1250000,
+      "userName": "Eleanor Vance",
+      "userEmail": "eleanor@navikx.com",
+      "userPhone": "",
+      "preferredDate": "2025-05-15",
+      "preferredTime": "02:00 PM",
+      "notes": "Looking forward to seeing the terrace.",
+      "status": "confirmed",
+      "createdAt": "2026-09-17T01:40:55.383Z"
+    },
+    {
+      "id": "book-1",
+      "propertyId": "prop-1",
+      "propertyTitle": "Seaside Villa",
+      "propertyLocation": "Bali, Indonesia",
+      "propertyImage": "https://images.unsplash.com/photo-1613490493576-7fde63acd811?q=80&w=800&auto=format&fit=crop",
+      "propertyPrice": 1250000,
+      "userName": "Alexander Wright",
+      "userEmail": "appsellbuy@gmail.com",
+      "userPhone": "+1 (555) 019-2834",
+      "preferredDate": "2025-04-12",
+      "preferredTime": "14:00",
+      "notes": "Interested in financing options and oceanfront boundary lines.",
+      "status": "confirmed",
+      "createdAt": "2025-03-01T10:00:00Z"
+    }
+  ],
+  "valuations": [],
+  "newsletter": [
+    "newsletter@client.com"
+  ],
+  "inquiries": [
+    {
+      "id": "inq-1789610491604",
+      "agentId": "agent-1",
+      "agentName": "Emma Johnson",
+      "agentEmail": "emma.johnson@navikx.com",
+      "userName": "Alexander Wright",
+      "userEmail": "appsellbuy@gmail.com",
+      "userPhone": "",
+      "inquiryType": "Buying",
+      "message": "Interested in beachfront villas in your portfolio.",
+      "createdAt": "2026-09-17T02:01:31.604Z",
+      "status": "received"
+    }
+  ],
+  "savedListings": [
+    {
+      "id": "saved-1",
+      "userId": "user-default",
+      "userEmail": "appsellbuy@gmail.com",
+      "propertyId": "prop-1",
+      "property": {
+        "id": "prop-1",
+        "title": "Seaside Villa",
+        "location": "Bali, Indonesia",
+        "price": 1250000,
+        "category": "house",
+        "beds": 4,
+        "baths": 3,
+        "sqft": 2400,
+        "image": "https://images.unsplash.com/photo-1613490493576-7fde63acd811?q=80&w=1600&auto=format&fit=crop",
+        "description": "A breathtaking contemporary oceanfront sanctuary featuring seamless indoor-outdoor living, infinity edge pool overlooking the Indian Ocean, handcrafted teak finishes, and expansive floor-to-ceiling glass pavilions.",
+        "featured": true,
+        "ownerId": "agent-1",
+        "ownerName": "Emma Johnson",
+        "createdAt": "2025-01-15T10:00:00Z",
+        "status": "active"
+      },
+      "createdAt": "2025-03-01T10:00:00Z"
+    }
+  ]
+}
