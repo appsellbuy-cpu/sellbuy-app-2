@@ -112,8 +112,12 @@ export const SellPropertySection: React.FC = () => {
                         onChange={(e) => setPropertyType(e.target.value)}
                         className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#C5A059]"
                       >
-                        <option value="house" className="text-gray-900">Luxury House / Villa</option>
+                        <option value="office" className="text-gray-900">Commercial Office Space</option>
+                        <option value="commercial" className="text-gray-900">Commercial Space & Shop</option>
+                        <option value="factory" className="text-gray-900">Industrial Factory & Plant</option>
+                        <option value="godown" className="text-gray-900">Godown & Warehouse</option>
                         <option value="apartment" className="text-gray-900">Apartment / Penthouse</option>
+                        <option value="house" className="text-gray-900">Luxury House / Villa</option>
                         <option value="plot" className="text-gray-900">Land / Plot</option>
                       </select>
                     </div>

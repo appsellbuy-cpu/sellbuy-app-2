@@ -60,7 +60,18 @@ body {
   line-height: 1.4;
 }
 
-.custom-property-pin {
+.custom-property-pin,
+.property-leaflet-marker,
+.poi-leaflet-marker {
   background: transparent;
   border: none;
+}
+
+/* Ensure Leaflet controls stay confined within modal containers */
+.leaflet-pane {
+  z-index: 10 !important;
+}
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 15 !important;
 }

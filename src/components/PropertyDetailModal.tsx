@@ -31,6 +31,7 @@ import { formatIndianCurrency, formatRentPrice } from '../utils/formatters';
 import { useProperties } from '../context/PropertyContext';
 import { useAuth } from '../context/AuthContext';
 import { PropertyCard } from './PropertyCard';
+import { PropertyLeafletMap } from './PropertyLeafletMap';
 
 interface PropertyDetailModalProps {
   property: Property | null;
@@ -52,7 +53,7 @@ export const PropertyDetailModal: React.FC<PropertyDetailModalProps> = ({
   const { isSaved, toggleFavorite, isInCompare, toggleCompare, showToast, properties, openDetail } = useProperties();
   const { user } = useAuth();
   const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const [activeMediaTab, setActiveMediaTab] = useState<'photos' | '360'>('photos');
+  const [activeMediaTab, setActiveMediaTab] = useState<'photos' | '360' | 'map'>('photos');
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const thumbnailsRef = useRef<HTMLDivElement>(null);
@@ -145,9 +146,24 @@ export const PropertyDetailModal: React.FC<PropertyDetailModalProps> = ({
     ? property.gallery 
     : [property.image];
 
-  const handleShare = () => {
+  const handleShare = async () => {
+    const shareData = {
+      title: property.title,
+      text: `Check out ${property.title} priced at ${displayPrice} in ${property.city || 'India'}`,
+      url: window.location.href,
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch (err) {
+        // User cancelled or share failed, fallback to clipboard
+      }
+    }
+
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(`${window.location.origin}/#property-${property.id}`);
+      navigator.clipboard.writeText(window.location.href);
       showToast('Property link copied to clipboard!');
     }
   };
@@ -169,7 +185,7 @@ export const PropertyDetailModal: React.FC<PropertyDetailModalProps> = ({
             <span className={`px-2.5 py-0.5 rounded-md text-[11px] font-extrabold uppercase tracking-wider ${
               property.listingType === 'rent' ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-slate-950'
             }`}>
-              {property.listingType === 'rent' ? 'FOR RENT' : property.listingType === 'buy' ? 'FOR SALE' : property.listingType.toUpperCase()}
+              {property.listingType === 'rent' ? 'FOR RENT' : property.listingType === 'buy' ? 'FOR SALE' : (property.listingType ? property.listingType.toUpperCase() : 'FOR SALE')}
             </span>
             <span className="text-sm font-bold truncate text-slate-100">{property.title}</span>
           </div>
@@ -257,6 +273,18 @@ export const PropertyDetailModal: React.FC<PropertyDetailModalProps> = ({
                       360° Virtual Tour
                       <span className="absolute -top-1.5 -right-2 w-2 h-2 rounded-full bg-red-500 animate-ping" />
                     </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveMediaTab('map')}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      activeMediaTab === 'map'
+                        ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-300/30'
+                    }`}
+                  >
+                    <MapPin className="w-3.5 h-3.5" />
+                    <span>Map View</span>
                   </button>
                 </div>
               </div>
@@ -374,7 +402,7 @@ export const PropertyDetailModal: React.FC<PropertyDetailModalProps> = ({
                   </div>
                 )}
               </div>
-            ) : (
+            ) : activeMediaTab === '360' ? (
               /* Immersive 360° Virtual Tour Viewport */
               <div className="space-y-3">
                 <div className="relative aspect-[16/9] sm:aspect-[21/9] rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 shadow-2xl group">
@@ -414,6 +442,11 @@ export const PropertyDetailModal: React.FC<PropertyDetailModalProps> = ({
                     <span>Return to Photo Gallery</span>
                   </button>
                 </div>
+              </div>
+            ) : (
+              /* React-Leaflet Geographic Location Map */
+              <div className="rounded-2xl overflow-hidden border border-slate-800 shadow-xl">
+                <PropertyLeafletMap property={property} />
               </div>
             )}
           </div>

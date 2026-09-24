@@ -91,13 +91,16 @@ export const PropertyFilterSidebar: React.FC<PropertyFilterSidebarProps> = ({
 
   // Helper lists
   const propertyTypesList = [
-    { value: 'apartment', label: 'Flats & Apartments' },
-    { value: 'villa', label: 'Villas & Bungalows' },
-    { value: 'house', label: 'Independent Houses' },
-    { value: 'plot', label: 'Plots / Land' },
-    { value: 'office', label: 'Commercial Office' },
-    { value: 'shop', label: 'Shops & Showrooms' },
-    { value: 'pg', label: 'PG / Co-Living' }
+    { value: 'office', label: '🏢 Commercial Office Space' },
+    { value: 'commercial', label: '🏬 Commercial Building & Retail' },
+    { value: 'factory', label: '🏭 Factory / Industrial Plant' },
+    { value: 'godown', label: '📦 Godown / Warehouse' },
+    { value: 'apartment', label: '🏠 Flats & Apartments' },
+    { value: 'villa', label: '🏡 Villas & Bungalows' },
+    { value: 'house', label: '🏘️ Independent Houses' },
+    { value: 'plot', label: '📐 Plots / Land' },
+    { value: 'shop', label: '🏪 Shops & Showrooms' },
+    { value: 'pg', label: '🛏️ PG / Co-Living' }
   ];
 
   const amenitiesList = [
@@ -108,23 +111,23 @@ export const PropertyFilterSidebar: React.FC<PropertyFilterSidebarProps> = ({
 
   const activeFiltersCount = React.useMemo(() => {
     let count = 0;
-    if (filters.location && filters.location !== 'All India') count++;
-    count += filters.propertyTypes.length;
-    count += filters.bhk.length;
-    if (filters.maxPrice < (isRentMode ? 200000 : 50000000)) count++;
-    count += filters.bathrooms.length;
-    if (filters.maxArea < 8000) count++;
-    count += filters.furnishing.length;
-    count += filters.amenities.length;
-    count += filters.postedBy.length;
-    if (filters.availability !== 'all') count++;
-    count += filters.constructionStatus.length;
-    count += filters.propertyAge.length;
-    count += filters.facing.length;
-    count += filters.parking.length;
-    if (filters.reraApproved) count++;
-    if (filters.zeroBrokerage) count++;
-    if (filters.petFriendly) count++;
+    if (filters?.location && filters.location !== 'All India') count++;
+    count += (filters?.propertyTypes || []).length;
+    count += (filters?.bhk || []).length;
+    if (filters?.maxPrice < (isRentMode ? 200000 : 50000000)) count++;
+    count += (filters?.bathrooms || []).length;
+    if (filters?.maxArea < 8000) count++;
+    count += (filters?.furnishing || []).length;
+    count += (filters?.amenities || []).length;
+    count += (filters?.postedBy || []).length;
+    if (filters?.availability && filters.availability !== 'all') count++;
+    count += (filters?.constructionStatus || []).length;
+    count += (filters?.propertyAge || []).length;
+    count += (filters?.facing || []).length;
+    count += (filters?.parking || []).length;
+    if (filters?.reraApproved) count++;
+    if (filters?.zeroBrokerage) count++;
+    if (filters?.petFriendly) count++;
     return count;
   }, [filters, isRentMode]);
 
@@ -432,15 +435,19 @@ export const PropertyFilterSidebar: React.FC<PropertyFilterSidebarProps> = ({
 
           {openSections.furnishing && (
             <div className="mt-2 pt-1 space-y-1.5">
-              {['Furnished', 'Semi-Furnished', 'Unfurnished'].map(f => (
-                <label key={f} className="flex items-center gap-2 text-xs text-slate-600 font-medium cursor-pointer">
+              {[
+                { value: 'Fully Furnished', label: '✨ Fully Furnished (Plug & Play)' },
+                { value: 'Semi-Furnished', label: '🛋️ Semi-Furnished' },
+                { value: 'Unfurnished', label: '🧱 Unfurnished / Bare Shell' }
+              ].map(f => (
+                <label key={f.value} className="flex items-center gap-2 text-xs text-slate-600 font-medium cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={filters.furnishing.includes(f)}
-                    onChange={() => handleCheckboxChange('furnishing', f)}
+                    checked={filters.furnishing.includes(f.value) || (f.value === 'Fully Furnished' && filters.furnishing.includes('Furnished'))}
+                    onChange={() => handleCheckboxChange('furnishing', f.value)}
                     className="w-3.5 h-3.5 rounded border-slate-300 text-amber-600 accent-amber-500 cursor-pointer"
                   />
-                  <span>{f}</span>
+                  <span>{f.label}</span>
                 </label>
               ))}
             </div>

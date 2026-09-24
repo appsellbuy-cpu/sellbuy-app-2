@@ -84,8 +84,6 @@ export const PostPropertyModal: React.FC<PostPropertyModalProps> = ({ isOpen, on
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
 
-  if (!isOpen) return null;
-
   const toggleAmenity = (amenity: string) => {
     setSelectedAmenities(prev =>
       prev.includes(amenity) ? prev.filter(a => a !== amenity) : [...prev, amenity]
@@ -413,6 +411,8 @@ export const PostPropertyModal: React.FC<PostPropertyModalProps> = ({ isOpen, on
     'Rainwater Harvesting'
   ];
 
+  if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/75 backdrop-blur-sm overflow-y-auto animate-in fade-in">
       <div 
@@ -487,18 +487,22 @@ export const PostPropertyModal: React.FC<PostPropertyModalProps> = ({ isOpen, on
           {/* Property Category */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[
-              { id: 'apartment', label: 'Apartment / Flat' },
-              { id: 'house', label: 'Independent House' },
-              { id: 'villa', label: 'Gated Villa' },
-              { id: 'office', label: 'Commercial Office' }
+              { id: 'apartment', label: '🏠 Apartment / Flat' },
+              { id: 'house', label: '🏘️ Independent House' },
+              { id: 'villa', label: '🏡 Gated Villa' },
+              { id: 'office', label: '🏢 Commercial Office' },
+              { id: 'commercial', label: '🏬 Commercial / Shop' },
+              { id: 'factory', label: '🏭 Factory / Industrial' },
+              { id: 'godown', label: '📦 Godown / Warehouse' },
+              { id: 'plot', label: '📐 Plot / Land' }
             ].map(c => (
               <button
                 key={c.id}
                 type="button"
                 onClick={() => setCategory(c.id as any)}
-                className={`p-2.5 rounded-xl border text-xs font-medium transition ${
+                className={`p-2.5 rounded-xl border text-xs font-medium transition cursor-pointer ${
                   category === c.id
-                    ? 'bg-slate-900 text-white border-slate-900 font-bold'
+                    ? 'bg-slate-900 text-white border-slate-900 font-bold shadow-sm'
                     : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                 }`}
               >
@@ -717,15 +721,15 @@ export const PostPropertyModal: React.FC<PostPropertyModalProps> = ({ isOpen, on
               </div>
 
               <div>
-                <label className="text-xs text-slate-600 font-medium mb-1 block">Furnishing</label>
+                <label className="text-xs text-slate-600 font-medium mb-1 block">Furnishing Status</label>
                 <select
                   value={furnishing}
                   onChange={(e) => setFurnishing(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
                 >
-                  <option value="Fully Furnished">Fully Furnished</option>
-                  <option value="Semi-Furnished">Semi-Furnished</option>
-                  <option value="Unfurnished">Unfurnished</option>
+                  <option value="Fully Furnished">✨ Fully Furnished (Plug & Play / Ready Desks)</option>
+                  <option value="Semi-Furnished">🛋️ Semi-Furnished (Partially Fitted / Cabins)</option>
+                  <option value="Unfurnished">🧱 Unfurnished / Bare Shell</option>
                 </select>
               </div>
 

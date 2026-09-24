@@ -1,5 +1,5 @@
 export type ListingType = 'buy' | 'rent' | 'commercial' | 'pg' | 'plot' | 'sale';
-export type PropertyCategory = 'apartment' | 'house' | 'villa' | 'independent_floor' | 'plot' | 'office' | 'shop' | 'pg';
+export type PropertyCategory = 'apartment' | 'house' | 'villa' | 'independent_floor' | 'plot' | 'office' | 'commercial' | 'factory' | 'godown' | 'warehouse' | 'shop' | 'pg';
 export type PropertySortOption = 'featured' | 'price-asc' | 'price-desc' | 'newest' | 'beds-desc' | 'sqft-desc';
 
 export interface Property {
@@ -39,7 +39,7 @@ export interface Property {
   };
   
   // Specific Metadata
-  furnishing?: 'Furnished' | 'Semi-Furnished' | 'Unfurnished';
+  furnishing?: 'Fully Furnished' | 'Semi-Furnished' | 'Unfurnished' | 'Bare Shell' | 'Warm Shell' | string;
   possessionStatus?: 'Ready to Move' | 'Under Construction' | 'Immediate Move-In';
   facing?: 'North' | 'East' | 'North-East' | 'West' | 'South' | string;
   floor?: string;
@@ -77,6 +77,7 @@ export interface Property {
   // Commercial specific
   commercialType?: 'Office Space' | 'Retail Shop' | 'Showroom' | 'Warehouse' | 'Co-Working Desk';
   suitableFor?: string[];
+  role?: 'family' | 'bachelor' | 'student' | 'working_professional' | 'company_lease';
 }
 
 export interface User {

@@ -31,7 +31,15 @@ export const Footer: React.FC<FooterProps> = ({
   const [subscribed, setSubscribed] = useState(false);
 
   const onNavigate = (view: string, extra?: { listingType?: string; category?: string; city?: string }) => {
-    if (propOnNavigate) propOnNavigate(view, extra);
+    if (propOnNavigate) {
+      propOnNavigate(view, extra);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (extra?.city) {
+      showToast(`Showing verified properties in ${extra.city}`);
+    } else if (view === 'buy' || view === 'rent' || view === 'pg' || view === 'commercial') {
+      showToast(`Switched to ${view.toUpperCase()} listings view`);
+    }
   };
 
   const handleSubscribe = async (e: React.FormEvent) => {
@@ -272,23 +280,27 @@ export const Footer: React.FC<FooterProps> = ({
           </div>
           <div className="flex flex-wrap gap-2 text-[11px] text-slate-500">
             {[
-              'Flats for rent in Mumbai',
-              'Apartments in Bangalore',
-              'Villas for sale in Hyderabad',
-              'Zero brokerage in Gurgaon',
-              'PG near Whitefield Bangalore',
-              '2 BHK in Koramangala',
-              'Commercial offices in BKC',
-              'Plots in Devanahalli',
-              'Flats in Powai',
-              'Luxury homes in Worli',
-              'Independent houses in Noida Extension',
-              'PG in Hinjawadi Pune',
-              'Flats for sale in South Delhi'
-            ].map((kw, idx) => (
-              <span key={idx} className="hover:text-slate-300 cursor-pointer transition">
-                {kw} {idx < 12 ? '•' : ''}
-              </span>
+              { label: 'Flats for rent in Mumbai', view: 'rent', city: 'Mumbai' },
+              { label: 'Apartments in Bangalore', view: 'buy', city: 'Bangalore', category: 'apartment' },
+              { label: 'Villas for sale in Hyderabad', view: 'buy', city: 'Hyderabad', category: 'villa' },
+              { label: 'Zero brokerage in Gurgaon', view: 'rent', city: 'Gurgaon' },
+              { label: 'PG near Whitefield Bangalore', view: 'pg', city: 'Bangalore' },
+              { label: '2 BHK in Koramangala', view: 'rent', city: 'Bangalore' },
+              { label: 'Commercial offices in BKC', view: 'commercial', city: 'Mumbai' },
+              { label: 'Plots in Devanahalli', view: 'plots', city: 'Bangalore' },
+              { label: 'Flats in Powai', view: 'buy', city: 'Mumbai' },
+              { label: 'Luxury homes in Worli', view: 'buy', city: 'Mumbai' },
+              { label: 'Independent houses in Noida Extension', view: 'buy', city: 'Gurgaon' },
+              { label: 'PG in Hinjawadi Pune', view: 'pg', city: 'Pune' },
+              { label: 'Flats for sale in South Delhi', view: 'buy', city: 'Gurgaon' }
+            ].map((item, idx) => (
+              <button 
+                key={idx} 
+                onClick={() => onNavigate(item.view, { city: item.city, category: item.category })}
+                className="hover:text-amber-400 text-left transition underline decoration-slate-800 hover:decoration-amber-400"
+              >
+                {item.label} {idx < 12 ? '•' : ''}
+              </button>
             ))}
           </div>
         </div>
@@ -299,13 +311,13 @@ export const Footer: React.FC<FooterProps> = ({
             © {new Date().getFullYear()} NavikX Technologies India Pvt. Ltd. All rights reserved. RERA Registered Platform.
           </div>
           <div className="flex flex-wrap gap-4">
-            <span className="hover:text-slate-300 cursor-pointer">Privacy Policy</span>
+            <span onClick={() => showToast('NavikX Privacy Policy: 100% Secure & RERA Compliant')} className="hover:text-slate-300 cursor-pointer">Privacy Policy</span>
             <span>•</span>
-            <span className="hover:text-slate-300 cursor-pointer">Terms of Service</span>
+            <span onClick={() => showToast('NavikX Terms of Service: Verified Brokerage-Free Direct Listings')} className="hover:text-slate-300 cursor-pointer">Terms of Service</span>
             <span>•</span>
-            <span className="hover:text-slate-300 cursor-pointer">RERA Disclaimer</span>
+            <span onClick={() => showToast('RERA Disclaimer: All project details verified from state RERA authorities')} className="hover:text-slate-300 cursor-pointer">RERA Disclaimer</span>
             <span>•</span>
-            <span className="hover:text-slate-300 cursor-pointer">Sitemap</span>
+            <span onClick={() => onNavigate('home')} className="hover:text-slate-300 cursor-pointer">Sitemap</span>
           </div>
         </div>
 

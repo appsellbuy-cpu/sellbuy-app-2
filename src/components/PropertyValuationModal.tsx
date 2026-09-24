@@ -146,8 +146,11 @@ export const PropertyValuationModal: React.FC<PropertyValuationModalProps> = ({ 
                     <option value="Apartment">Apartment</option>
                     <option value="House">Independent House</option>
                     <option value="Villa">Villa</option>
+                    <option value="Office">🏢 Office Space</option>
+                    <option value="Commercial">🏬 Commercial Space & Shop</option>
+                    <option value="Factory">🏭 Factory / Industrial Plant</option>
+                    <option value="Godown">📦 Godown / Warehouse</option>
                     <option value="Plot">Plot / Land</option>
-                    <option value="Commercial">Office / Shop</option>
                   </select>
                 </div>
 

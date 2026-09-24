@@ -112,20 +112,20 @@ export const RentPage: React.FC<RentPageProps> = ({
       }
 
       // 4. Property Category (Types)
-      if (filters.propertyTypes.length > 0) {
+      if ((filters?.propertyTypes || []).length > 0) {
         if (!filters.propertyTypes.includes(p.category)) return false;
       }
 
       // 5. BHK Count
-      if (filters.bhk.length > 0) {
+      if ((filters?.bhk || []).length > 0) {
         if (!filters.bhk.includes(p.beds.toString())) return false;
       }
 
       // 6. Max Monthly Rent Price
-      if (p.price > filters.maxPrice) return false;
+      if (p.price > (filters?.maxPrice || 150000)) return false;
 
       // 7. Bathrooms
-      if (filters.bathrooms.length > 0) {
+      if ((filters?.bathrooms || []).length > 0) {
         const hasMatch = filters.bathrooms.some(bVal => {
           if (bVal === '4+') return p.baths >= 4;
           return p.baths.toString() === bVal;
@@ -134,15 +134,15 @@ export const RentPage: React.FC<RentPageProps> = ({
       }
 
       // 8. Max Area (Sq.Ft.)
-      if (p.sqft > filters.maxArea) return false;
+      if (p.sqft > (filters?.maxArea || 8000)) return false;
 
       // 9. Furnishing Conditions
-      if (filters.furnishing.length > 0) {
+      if ((filters?.furnishing || []).length > 0) {
         if (!p.furnishing || !filters.furnishing.includes(p.furnishing)) return false;
       }
 
       // 10. Required Amenities
-      if (filters.amenities.length > 0) {
+      if ((filters?.amenities || []).length > 0) {
         if (!p.amenities) return false;
         const matchesAll = filters.amenities.every(required => 
           p.amenities?.some(has => has.toLowerCase() === required.toLowerCase())
@@ -151,27 +151,27 @@ export const RentPage: React.FC<RentPageProps> = ({
       }
 
       // 11. Posted By
-      if (filters.postedBy.length > 0) {
+      if ((filters?.postedBy || []).length > 0) {
         if (!p.postedBy || !filters.postedBy.includes(p.postedBy)) return false;
       }
 
       // 12. Construction possession status
-      if (filters.constructionStatus.length > 0) {
+      if ((filters?.constructionStatus || []).length > 0) {
         if (!p.possessionStatus || !filters.constructionStatus.includes(p.possessionStatus)) return false;
       }
 
       // 13. Property Age
-      if (filters.propertyAge.length > 0) {
+      if ((filters?.propertyAge || []).length > 0) {
         if (!p.ageOfProperty || !filters.propertyAge.includes(p.ageOfProperty)) return false;
       }
 
       // 14. Vastu direction facing
-      if (filters.facing.length > 0) {
+      if ((filters?.facing || []).length > 0) {
         if (!p.facing || !filters.facing.includes(p.facing)) return false;
       }
 
       // 15. Parking configurations
-      if (filters.parking.length > 0) {
+      if ((filters?.parking || []).length > 0) {
         if (!p.parking || !filters.parking.includes(p.parking)) return false;
       }
 

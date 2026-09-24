@@ -55,6 +55,7 @@ interface PropertyContextType {
   closeCompareModal: () => void;
   isInCompare: (propertyId: string) => boolean;
   savedListings: SavedListing[];
+  savedProperties: Property[];
   isSaved: (propertyId: string) => boolean;
   toggleFavorite: (property: Property) => Promise<boolean>;
   removeSavedListing: (propertyId: string) => Promise<boolean>;
@@ -141,7 +142,7 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [isSellModalOpen, setIsSellModalOpen] = useState<boolean>(false);
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [bookings, setBookings] = useState<ViewingBooking[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Compare properties list (up to 3)
@@ -169,6 +170,10 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   useEffect(() => {
     localStorage.setItem('navikx_saved_listings', JSON.stringify(savedListings));
+  }, [savedListings]);
+
+  const savedProperties = React.useMemo(() => {
+    return savedListings.map(s => s.property).filter(Boolean) as Property[];
   }, [savedListings]);
 
   const showToast = useCallback((msg: string) => {
@@ -307,6 +312,7 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   );
 
   const loadProperties = useCallback(async () => {
+    setLoading(true);
     try {
       const data = await api.getProperties();
       if (data && data.length > 0) {
@@ -315,6 +321,8 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     } catch (err) {
       console.warn('Failed to load from API, keeping cached properties', err);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -723,6 +731,7 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         closeCompareModal,
         isInCompare,
         savedListings,
+        savedProperties,
         isSaved,
         toggleFavorite,
         removeSavedListing,

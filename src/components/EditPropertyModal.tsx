@@ -314,9 +314,13 @@ export const EditPropertyModal: React.FC<EditPropertyModalProps> = ({ property, 
                 onChange={(e) => setCategory(e.target.value as any)}
                 className="w-full text-sm p-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#0A192F]"
               >
-                <option value="house">House</option>
-                <option value="apartment">Apartment</option>
-                <option value="plot">Plot</option>
+                <option value="office">🏢 Commercial Office Space</option>
+                <option value="commercial">🏬 Commercial Building & Retail</option>
+                <option value="factory">🏭 Factory / Industrial Plant</option>
+                <option value="godown">📦 Godown / Warehouse</option>
+                <option value="apartment">🏠 Apartment / Flat</option>
+                <option value="house">🏡 House / Villa</option>
+                <option value="plot">📐 Plot / Land</option>
               </select>
             </div>
           </div>

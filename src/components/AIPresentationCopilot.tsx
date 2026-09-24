@@ -326,7 +326,7 @@ export const AIPresentationCopilot: React.FC<AIPresentationCopilotProps> = ({
       ) : (
         <div className="space-y-3">
           <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider block">
-            📚 Ready-made Professional Presets for {category.toUpperCase()}:
+            📚 Ready-made Professional Presets for {category ? category.toUpperCase() : 'PROPERTY'}:
           </span>
           <div className="grid grid-cols-1 gap-2.5">
             {presets.map((preset) => (

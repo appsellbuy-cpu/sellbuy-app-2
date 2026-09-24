@@ -227,7 +227,7 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
                     {fullName || user?.name}
                   </h1>
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black uppercase tracking-wider">
-                    {role.toUpperCase()}
+                    {role ? role.toUpperCase() : 'USER'}
                   </span>
                 </div>
                 
