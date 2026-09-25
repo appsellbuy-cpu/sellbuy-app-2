@@ -1,12 +1,23 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User } from '../types';
 import { api } from '../services/api';
+import { 
+  supabaseAuth, 
+  isSupabaseConfigured, 
+  fetchUserActivityHistory, 
+  recordUserActivity, 
+  UserActivityRecord 
+} from '../lib/supabase';
 
 interface AuthContextType {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isSupabaseActive: boolean;
+  activityHistory: UserActivityRecord[];
+  refreshActivityHistory: () => Promise<void>;
+  logActivity: (action: UserActivityRecord['action'], title: string, property?: any, details?: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string, role?: string, phone?: string, city?: string) => Promise<void>;
   logout: () => void;
@@ -45,6 +56,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalTab, setAuthModalTab] = useState<'login' | 'register'>('login');
+  const [activityHistory, setActivityHistory] = useState<UserActivityRecord[]>([]);
+
+  const isSupabaseActive = isSupabaseConfigured();
+
+  const refreshActivityHistory = useCallback(async () => {
+    if (user?.id) {
+      const history = await fetchUserActivityHistory(user.id);
+      setActivityHistory(history);
+    } else {
+      setActivityHistory([]);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    refreshActivityHistory();
+  }, [refreshActivityHistory]);
+
+  // Listen to Supabase Auth State Change if configured
+  useEffect(() => {
+    if (isSupabaseActive) {
+      const { data } = supabaseAuth.onAuthStateChange(async (event, session) => {
+        if (event === 'SIGNED_IN' && session?.user) {
+          const supaUser: User = {
+            id: session.user.id,
+            name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
+            email: session.user.email || '',
+            role: session.user.user_metadata?.role || 'user',
+            phone: session.user.user_metadata?.phone || '',
+            city: session.user.user_metadata?.city || 'Mumbai',
+            avatar: session.user.user_metadata?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=400&auto=format&fit=crop'
+          };
+          setUser(supaUser);
+          setToken(session.access_token);
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setToken(null);
+        }
+      });
+
+      return () => {
+        data?.subscription?.unsubscribe();
+      };
+    }
+  }, [isSupabaseActive]);
 
   useEffect(() => {
     if (user) {
@@ -59,13 +114,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user, token]);
 
+  const logActivity = async (action: UserActivityRecord['action'], title: string, property?: any, details?: string) => {
+    if (user?.id) {
+      await recordUserActivity(user.id, action, title, property, details);
+      await refreshActivityHistory();
+    }
+  };
+
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     try {
-      const res = await api.login(email, password);
-      setUser(res.user);
-      setToken(res.token);
+      if (isSupabaseActive) {
+        const res = await supabaseAuth.signInWithPassword(email, password);
+        if (res?.user) {
+          const supaUser: User = {
+            id: res.user.id,
+            name: res.user.user_metadata?.name || email.split('@')[0],
+            email: res.user.email || email,
+            role: res.user.user_metadata?.role || 'user',
+            phone: res.user.user_metadata?.phone || '+91 98201 45678',
+            city: res.user.user_metadata?.city || 'Mumbai',
+            avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=400&auto=format&fit=crop'
+          };
+          setUser(supaUser);
+          setToken(res.session?.access_token || `token-${supaUser.id}`);
+          await recordUserActivity(supaUser.id, 'login', `Signed in successfully as ${supaUser.email}`);
+        }
+      } else {
+        const res = await api.login(email, password);
+        setUser(res.user);
+        setToken(res.token);
+        await recordUserActivity(res.user.id, 'login', `Signed in successfully as ${res.user.email}`);
+      }
       setIsAuthModalOpen(false);
+      await refreshActivityHistory();
     } finally {
       setIsLoading(false);
     }
@@ -74,20 +156,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const register = async (name: string, email: string, password: string, role?: string, phone?: string, city?: string) => {
     setIsLoading(true);
     try {
-      const res = await api.register({ name, email, password, role, phone, city });
-      setUser(res.user);
-      setToken(res.token);
+      if (isSupabaseActive) {
+        const res = await supabaseAuth.signUp(email, password, { name, role, phone, city });
+        if (res?.user) {
+          const supaUser: User = {
+            id: res.user.id,
+            name: name || email.split('@')[0],
+            email,
+            role: (role as any) || 'user',
+            phone: phone || '+91 98201 00000',
+            city: city || 'Mumbai',
+            avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=400&auto=format&fit=crop'
+          };
+          setUser(supaUser);
+          setToken(res.session?.access_token || `token-${supaUser.id}`);
+          await recordUserActivity(supaUser.id, 'login', `Registered new account as ${supaUser.name}`);
+        }
+      } else {
+        const res = await api.register({ name, email, password, role, phone, city });
+        setUser(res.user);
+        setToken(res.token);
+        await recordUserActivity(res.user.id, 'login', `Registered new account as ${res.user.name}`);
+      }
       setIsAuthModalOpen(false);
+      await refreshActivityHistory();
     } finally {
       setIsLoading(false);
     }
   };
 
   const logout = () => {
+    if (isSupabaseActive) {
+      supabaseAuth.signOut();
+    }
     setUser(null);
     setToken(null);
     localStorage.removeItem('navikx_user');
     localStorage.removeItem('navikx_token');
+    setActivityHistory([]);
   };
 
   const openAuthModal = (tab: 'login' | 'register' = 'login') => {
@@ -100,8 +206,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const switchDemoRole = (role: 'user' | 'agent' | 'admin' | 'seller') => {
+    let targetUser: User;
     if (role === 'admin') {
-      setUser({
+      targetUser = {
         id: 'user-admin',
         name: 'Pooja Hegde (Admin)',
         email: 'admin@navikx.in',
@@ -109,10 +216,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         phone: '+91 99001 23456',
         city: 'Bangalore',
         avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=400&auto=format&fit=crop'
-      });
+      };
       setToken('token-user-admin');
     } else if (role === 'seller') {
-      setUser({
+      targetUser = {
         id: 'user-seller-1',
         name: 'Vikramaditya Singhania',
         email: 'vikram.singhania@gmail.com',
@@ -120,10 +227,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         phone: '+91 98201 45678',
         city: 'Mumbai',
         avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=400&auto=format&fit=crop'
-      });
+      };
       setToken('token-user-seller-1');
     } else if (role === 'agent') {
-      setUser({
+      targetUser = {
         id: 'agent-1',
         name: 'Pooja Hegde (Verified Agent)',
         email: 'pooja.hegde@navikx.in',
@@ -131,10 +238,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         phone: '+91 99001 23456',
         city: 'Bangalore',
         avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=400&auto=format&fit=crop'
-      });
+      };
       setToken('token-agent-1');
     } else {
-      setUser({
+      targetUser = {
         id: 'user-default',
         name: 'Alexander Wright',
         email: 'appsellbuy@gmail.com',
@@ -142,9 +249,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         phone: '+91 98201 45678',
         city: 'Mumbai',
         avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=400&auto=format&fit=crop'
-      });
+      };
       setToken('token-user-default');
     }
+    setUser(targetUser);
+    recordUserActivity(targetUser.id, 'login', `Switched demo role to ${role}`);
   };
 
   const updateUserProfile = async (updatedData: Partial<User>): Promise<User> => {
@@ -154,6 +263,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updatedUser = { ...user, ...updatedData };
     setUser(updatedUser);
     localStorage.setItem('navikx_user', JSON.stringify(updatedUser));
+    await recordUserActivity(user.id, 'login', 'Updated profile information');
     return updatedUser;
   };
 
@@ -161,7 +271,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!currentPass || !newPass) {
       throw new Error('Passwords cannot be empty');
     }
-    // Simulate API delay
     await new Promise(resolve => setTimeout(resolve, 800));
     return true;
   };
@@ -173,6 +282,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         token,
         isAuthenticated: !!user,
         isLoading,
+        isSupabaseActive,
+        activityHistory,
+        refreshActivityHistory,
+        logActivity,
         login,
         register,
         logout,
@@ -197,3 +310,4 @@ export const useAuth = () => {
   }
   return context;
 };
+

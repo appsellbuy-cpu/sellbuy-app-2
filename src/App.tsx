@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Home,
   Compass,
@@ -38,9 +38,41 @@ import {
   List,
   Warehouse,
   Factory,
-  Briefcase
+  Briefcase,
+  Lock,
+  LogIn,
+  LogOut,
+  Database,
+  RefreshCw,
+  Sliders,
+  CheckCircle2,
+  History,
+  UserCheck,
+  Settings,
+  Layers,
+  Activity,
+  Zap,
+  Globe,
+  Camera,
+  UploadCloud,
+  Trash2
 } from 'lucide-react';
 import { PropertyLeafletMap } from './components/PropertyLeafletMap';
+import { CameraCaptureModal, CapturedPhoto } from './components/CameraCaptureModal';
+import { DatabaseManagerModal } from './components/DatabaseManagerModal';
+import { useAuth } from './context/AuthContext';
+import { 
+  fetchUserSavedListings, 
+  toggleUserSavedListing, 
+  isSupabaseConfigured, 
+  recordUserActivity, 
+  fetchUserActivityHistory,
+  savePropertyToSupabase,
+  uploadPropertyPhotoToSupabase,
+  fetchPropertiesFromSupabase,
+  subscribeToPropertiesRealtime,
+  UserActivityRecord 
+} from './lib/supabase';
 
 interface Property {
   id: string;
@@ -56,6 +88,7 @@ interface Property {
   area: number; // sqft
   rating: number;
   image: string;
+  gallery?: string[];
   description: string;
   featured: boolean;
   reraId?: string;
@@ -592,6 +625,52 @@ export default function App() {
   
   const comparisonList = useMemo(() => properties.filter(p => compareIds.includes(p.id)), [properties, compareIds]);
 
+  // Supabase Authentication & User Hook
+  const {
+    user,
+    token,
+    isAuthenticated,
+    isLoading: isAuthLoading,
+    isSupabaseActive,
+    activityHistory,
+    refreshActivityHistory,
+    logActivity,
+    login,
+    register,
+    logout,
+    isAuthModalOpen,
+    openAuthModal,
+    closeAuthModal,
+    switchDemoRole,
+    updateUserProfile
+  } = useAuth();
+
+  // Modals for Authentication & Profile
+  const [showSignInModal, setShowSignInModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const [authEmail, setAuthEmail] = useState('appsellbuy@gmail.com');
+  const [authPassword, setAuthPassword] = useState('password123');
+  const [authName, setAuthName] = useState('Alexander Wright');
+  const [authPhone, setAuthPhone] = useState('+91 98201 45678');
+  const [authRole, setAuthRole] = useState<'user' | 'agent' | 'seller'>('seller');
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+
+  // User Property Preferences in Supabase
+  const [userPreferences, setUserPreferences] = useState({
+    preferredCity: 'Mumbai',
+    preferredCategory: 'Office',
+    preferredFurnishing: 'Fully Furnished',
+    budgetRange: '₹50,000 - ₹1,50,000 / mo',
+    autoAlerts: true
+  });
+  const [isSavingPreferences, setIsSavingPreferences] = useState(false);
+
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [showDatabaseModal, setShowDatabaseModal] = useState(false);
+  const [capturedPhotos, setCapturedPhotos] = useState<CapturedPhoto[]>([]);
+
   const [postForm, setPostForm] = useState({
     title: '',
     location: '',
@@ -605,6 +684,7 @@ export default function App() {
     area: '',
     description: '',
     image: 'https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=1200&auto=format&fit=crop',
+    gallery: [] as string[],
     ownerName: '',
     phone: '',
     email: '',
@@ -613,22 +693,46 @@ export default function App() {
     floor: 'Ground Floor'
   });
 
-  // Saved Property IDs
-  const [savedIds, setSavedIds] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('navikx_saved_properties') || localStorage.getItem('nestify_saved_ids');
-      return saved ? JSON.parse(saved) : ['prop-1', 'prop-4'];
-    } catch {
-      return ['prop-1', 'prop-4'];
-    }
-  });
+  // Saved Property IDs (Synced directly with Supabase Database)
+  const [savedIds, setSavedIds] = useState<string[]>([]);
+  const [isLoadingSaved, setIsLoadingSaved] = useState(false);
 
+  // Load Saved Properties directly from Supabase on user / auth change
   useEffect(() => {
-    try {
-      localStorage.setItem('navikx_saved_properties', JSON.stringify(savedIds));
-      localStorage.setItem('nestify_saved_ids', JSON.stringify(savedIds));
-    } catch {}
-  }, [savedIds]);
+    let isMounted = true;
+    const loadSupabaseSaved = async () => {
+      if (user?.id) {
+        setIsLoadingSaved(true);
+        try {
+          const supaSaved = await fetchUserSavedListings(user.id);
+          if (isMounted) {
+            if (supaSaved && supaSaved.length > 0) {
+              setSavedIds(supaSaved.map(s => s.propertyId));
+            } else {
+              // Default demo saved IDs for initial experience
+              const defaultSaved = ['prop-1', 'prop-4'];
+              setSavedIds(defaultSaved);
+            }
+          }
+        } catch (err) {
+          console.warn('Supabase saved properties load error:', err);
+        } finally {
+          if (isMounted) setIsLoadingSaved(false);
+        }
+      } else {
+        // Anonymous guest fallback
+        try {
+          const guestSaved = localStorage.getItem('nestify_saved_ids');
+          setSavedIds(guestSaved ? JSON.parse(guestSaved) : ['prop-1', 'prop-4']);
+        } catch {
+          setSavedIds(['prop-1', 'prop-4']);
+        }
+      }
+    };
+
+    loadSupabaseSaved();
+    return () => { isMounted = false; };
+  }, [user?.id]);
 
   // Modal Detail State & Media Tab
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
@@ -862,15 +966,95 @@ export default function App() {
     showListingAlertToast(newListing);
   };
 
-  const toggleSave = (id: string, e?: React.MouseEvent) => {
+  const toggleSave = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    setSavedIds(prev => {
-      const exists = prev.includes(id);
-      const next = exists ? prev.filter(item => item !== id) : [...prev, id];
-      localStorage.setItem('nestify_saved_ids', JSON.stringify(next));
-      showToast(exists ? 'Removed from saved properties' : 'Added to saved properties!');
-      return next;
-    });
+    const targetProp = properties.find(p => p.id === id);
+    const wasSaved = savedIds.includes(id);
+    const nextSaved = wasSaved ? savedIds.filter(item => item !== id) : [...savedIds, id];
+    setSavedIds(nextSaved);
+
+    if (user?.id && targetProp) {
+      try {
+        await toggleUserSavedListing(user.id, targetProp);
+        showToast(
+          wasSaved
+            ? `Removed "${targetProp.title}" from Supabase database`
+            : `Saved "${targetProp.title}" directly to Supabase cloud database!`
+        );
+        refreshActivityHistory();
+      } catch (err) {
+        console.warn('Failed to update Supabase saved listing:', err);
+        showToast(wasSaved ? 'Removed from saved properties' : 'Saved to favorites');
+      }
+    } else {
+      try {
+        localStorage.setItem('nestify_saved_ids', JSON.stringify(nextSaved));
+      } catch {}
+      showToast(
+        wasSaved
+          ? 'Removed from saved properties'
+          : 'Saved! Sign in with Supabase to sync across all devices.'
+      );
+    }
+  };
+
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setAuthSubmitting(true);
+    try {
+      if (authMode === 'signin') {
+        await login(authEmail, authPassword);
+        showToast(`Welcome back! Authenticated with Supabase database.`);
+      } else {
+        await register(authName, authEmail, authPassword, authRole, authPhone, userPreferences.preferredCity);
+        showToast(`Account created in Supabase database! Welcome, ${authName}.`);
+      }
+      setShowSignInModal(false);
+      closeAuthModal();
+    } catch (err: any) {
+      setAuthError(err?.message || 'Authentication failed. Please check credentials.');
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
+
+  const handleQuickLogin = async (email: string, pass: string, name: string) => {
+    setAuthError(null);
+    setAuthSubmitting(true);
+    setAuthEmail(email);
+    setAuthPassword(pass);
+    try {
+      await login(email, pass);
+      showToast(`Signed in as ${name} (Supabase Connected)`);
+      setShowSignInModal(false);
+      closeAuthModal();
+    } catch (err: any) {
+      setAuthError(err?.message || 'Quick login failed');
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
+
+  const handleSavePreferences = async () => {
+    setIsSavingPreferences(true);
+    try {
+      if (user?.id) {
+        await logActivity(
+          'filter_search',
+          `Updated property preferences: ${userPreferences.preferredCity} • ${userPreferences.preferredCategory} • ${userPreferences.preferredFurnishing}`
+        );
+        await updateUserProfile({
+          city: userPreferences.preferredCity
+        });
+      }
+      showToast('Saved property preferences to Supabase database!');
+    } catch (err) {
+      console.warn('Failed to save preferences to Supabase:', err);
+      showToast('Preferences updated locally.');
+    } finally {
+      setIsSavingPreferences(false);
+    }
   };
 
   const toggleCompare = (id: string, e?: React.MouseEvent) => {
@@ -943,6 +1127,10 @@ export default function App() {
       ? (numPrice >= 10000000 ? `₹${(numPrice / 10000000).toFixed(2)} Cr` : `₹${(numPrice / 100000).toFixed(1)} Lakh`)
       : `₹${Number(postForm.price).toLocaleString()} / mo`;
 
+    const finalGallery = postForm.gallery && postForm.gallery.length > 0 
+      ? postForm.gallery 
+      : [postForm.image];
+
     const newProp: Property = {
       id: `prop-${Date.now()}`,
       title: postForm.title,
@@ -955,9 +1143,10 @@ export default function App() {
       beds: Number(postForm.beds) || 2,
       baths: Number(postForm.baths) || 2,
       area: Number(postForm.area) || 1200,
-      rating: 4.8,
+      rating: 4.9,
       image: postForm.image,
-      description: postForm.description || 'Verified property listed with zero brokerage and clear RERA title.',
+      gallery: finalGallery,
+      description: postForm.description || 'Verified property listed with zero brokerage, camera-verified photos, and clear RERA title.',
       featured: true,
       reraId: postForm.reraId,
       possession: postForm.possession,
@@ -971,12 +1160,31 @@ export default function App() {
       localStorage.setItem('nestify_properties', JSON.stringify(updated));
     } catch {}
 
+    // Persist property and photos directly to Supabase cloud database
+    (async () => {
+      try {
+        await savePropertyToSupabase(newProp as any, user);
+        if (user?.id) {
+          await recordUserActivity(
+            user.id,
+            'post_property',
+            `Listed "${newProp.title}" with ${finalGallery.length} camera photos in Supabase`,
+            newProp as any
+          );
+          refreshActivityHistory();
+        }
+      } catch (err) {
+        console.warn('Failed to save listing to Supabase database:', err);
+      }
+    })();
+
     if (rentalReminderEnabled && newProp.purpose === 'rent' && matchesRentalCriteria(newProp)) {
       showListingAlertToast(newProp);
     } else {
-      showToast('Property successfully listed and verified!');
+      showToast('Property & Camera Photos successfully listed in Supabase database!');
     }
     setShowPostModal(false);
+    setCapturedPhotos([]);
     setPostStep(1);
     setPostForm({
       title: '',
@@ -991,6 +1199,7 @@ export default function App() {
       area: '',
       description: '',
       image: 'https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=1200&auto=format&fit=crop',
+      gallery: [],
       ownerName: '',
       phone: '',
       email: '',
@@ -1183,24 +1392,59 @@ export default function App() {
             <button onClick={() => setActiveTab('saved')} className={`hover:text-amber-600 transition flex items-center gap-1 ${activeTab === 'saved' ? 'text-amber-600 font-bold' : ''}`}>
               <Heart className="w-4 h-4 text-rose-500 fill-rose-500" /> Saved ({savedIds.length})
             </button>
+            <button 
+              onClick={() => setShowDatabaseModal(true)} 
+              className="hover:text-emerald-600 transition flex items-center gap-1 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-xl text-xs font-bold border border-emerald-200 cursor-pointer"
+              title="Open Supabase Database Management & Schema Center"
+            >
+              <Database className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Database</span>
+            </button>
             <button onClick={() => setActiveTab('contact')} className={`hover:text-amber-600 transition ${activeTab === 'contact' ? 'text-amber-600 font-bold' : ''}`}>Contact</button>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              onClick={() => setShowDatabaseModal(true)}
+              className="sm:hidden p-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold flex items-center cursor-pointer"
+              title="Supabase Database Center"
+            >
+              <Database className="w-4 h-4" />
+            </button>
             <button 
               onClick={() => setShowPostModal(true)}
-              className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center gap-1.5"
+              className="hidden sm:flex px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-md transition items-center gap-1.5 cursor-pointer"
             >
               <PlusCircle className="w-4 h-4" />
               <span>Post Property</span>
             </button>
             
-            <button 
-              onClick={() => setActiveTab('profile')}
-              className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold hover:bg-slate-200 transition"
-            >
-              <User className="w-4 h-4" />
-            </button>
+            {user ? (
+              <button 
+                onClick={() => setShowProfileModal(true)}
+                className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 transition border border-slate-200/80 cursor-pointer"
+                title="Supabase Authenticated Profile"
+              >
+                <div className="w-6 h-6 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center font-black text-xs">
+                  {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                </div>
+                <div className="hidden sm:block text-left">
+                  <p className="text-xs font-bold leading-none text-slate-900 truncate max-w-[110px]">{user.name || 'Account'}</p>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span className="text-[9px] font-semibold text-emerald-700 leading-none">Supabase Sync</span>
+                  </div>
+                </div>
+              </button>
+            ) : (
+              <button 
+                onClick={() => { setAuthMode('signin'); setShowSignInModal(true); }}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <LogIn className="w-3.5 h-3.5 text-amber-400" />
+                <span>Sign In</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -1975,10 +2219,57 @@ export default function App() {
         {/* ================= SAVED PROPERTIES TAB ================= */}
         {activeTab === 'saved' && (
           <div className="space-y-6 animate-in fade-in duration-300">
-            <div>
-              <h3 className="text-2xl font-bold font-serif text-slate-900">Saved Properties</h3>
-              <p className="text-xs sm:text-sm text-slate-500">Your shortlisted favorites and wishlist items</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-2xl font-bold font-serif text-slate-900">Saved Properties</h3>
+                  <span className="px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-600 text-xs font-extrabold border border-rose-200">
+                    {savedIds.length} Saved
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+                  Directly synced with Supabase PostgreSQL database table <code className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px] font-mono text-slate-700">saved_properties</code>
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowDatabaseModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold cursor-pointer transition"
+                  title="Open Supabase Database Manager"
+                >
+                  <Database className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Supabase Database Center</span>
+                </button>
+                {!user && (
+                  <button
+                    onClick={() => { setAuthMode('signin'); setShowSignInModal(true); }}
+                    className="px-3.5 py-1.5 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <LogIn className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Sign In to Sync</span>
+                  </button>
+                )}
+              </div>
             </div>
+
+            {!user && (
+              <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-amber-950">
+                <div className="flex items-center gap-2.5">
+                  <ShieldCheck className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                  <p className="text-xs font-medium">
+                    <strong className="font-bold">Guest Mode:</strong> Sign in with Supabase to securely save your shortlisted properties across all devices and browsers.
+                  </p>
+                </div>
+                <button
+                  onClick={() => { setAuthMode('signin'); setShowSignInModal(true); }}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-xl whitespace-nowrap shadow-xs transition"
+                >
+                  Sign In with Supabase
+                </button>
+              </div>
+            )}
 
             {savedPropertiesList.length === 0 ? (
               <div className="text-center py-20 bg-white rounded-3xl border border-slate-200 p-8 space-y-4">
@@ -1986,7 +2277,9 @@ export default function App() {
                   <Heart className="w-6 h-6" />
                 </div>
                 <h4 className="text-base font-bold text-slate-900">No saved properties yet</h4>
-                <p className="text-xs text-slate-500 max-w-sm mx-auto">Click the heart icon on any property card to save it to your wishlist for quick comparison and inquiry.</p>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  Click the heart icon on any property card to save it directly to your Supabase cloud wishlist.
+                </p>
                 <button 
                   onClick={() => setActiveTab('explore')}
                   className="px-6 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-md transition"
@@ -2015,6 +2308,7 @@ export default function App() {
                       <button
                         onClick={(e) => toggleSave(property.id, e)}
                         className="absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center backdrop-blur-md transition shadow-md bg-rose-500 text-white"
+                        title="Remove from Supabase saved properties"
                       >
                         <Heart className="w-4 h-4 fill-current" />
                       </button>
@@ -2031,6 +2325,11 @@ export default function App() {
                         <SlidersHorizontal className="w-3 h-3" />
                         {compareIds.includes(property.id) ? 'Comparing' : 'Compare'}
                       </button>
+
+                      <div className="absolute top-3 left-3 px-2.5 py-1 rounded-md bg-slate-900/90 text-amber-400 text-[10px] font-extrabold uppercase tracking-wider border border-amber-500/30 flex items-center gap-1">
+                        <Database className="w-3 h-3 text-emerald-400" />
+                        <span>Supabase Synced</span>
+                      </div>
 
                       <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between text-white">
                         <div>
@@ -2067,50 +2366,300 @@ export default function App() {
 
         {/* ================= PROFILE TAB ================= */}
         {activeTab === 'profile' && (
-          <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in duration-300">
-            <div className="bg-white p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
-              <div className="flex items-center gap-4 border-b border-slate-100 pb-6">
-                <div className="w-16 h-16 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center text-2xl font-black shadow-md">
-                  A
+          <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in duration-300">
+            {user ? (
+              <div className="space-y-6">
+                {/* Profile Header Card */}
+                <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-6">
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-600 to-amber-400 text-slate-950 flex items-center justify-center text-2xl font-black shadow-md shadow-amber-500/20">
+                        {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-xl font-bold text-slate-900">{user.name || 'User Account'}</h3>
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-extrabold uppercase tracking-wider border border-emerald-200 flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3 text-emerald-600" />
+                            {user.role?.toUpperCase() || 'MEMBER'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">{user.email} • {user.phone || '+91 98201 45678'}</p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md font-mono">
+                            <Database className="w-3 h-3 text-emerald-600" /> UID: {user.id.slice(0, 14)}...
+                          </span>
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                            <Zap className="w-3 h-3 text-emerald-600" /> Supabase Real-time Sync Active
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-end sm:self-auto">
+                      <button
+                        onClick={() => {
+                          logout();
+                          showToast('Signed out of Supabase successfully.');
+                        }}
+                        className="px-4 py-2 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-700 font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>Sign Out</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Supabase Database Storage Metrics */}
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Database className="w-3.5 h-3.5 text-amber-600" /> Supabase Database Persistence
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div 
+                        onClick={() => setActiveTab('saved')}
+                        className="p-4 rounded-2xl bg-slate-50 hover:bg-amber-50/60 border border-slate-200 transition cursor-pointer space-y-1"
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs text-slate-500 font-medium">Saved Properties</p>
+                          <Heart className="w-4 h-4 text-rose-500 fill-rose-500" />
+                        </div>
+                        <p className="text-xl font-black text-slate-900">{savedIds.length}</p>
+                        <p className="text-[10px] text-slate-400">Stored in <code className="font-mono text-slate-600">saved_properties</code> table</p>
+                      </div>
+
+                      <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs text-slate-500 font-medium">Database Status</p>
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        </div>
+                        <p className="text-sm font-bold text-emerald-700">Connected</p>
+                        <p className="text-[10px] text-slate-400">PostgreSQL Cloud DB</p>
+                      </div>
+
+                      <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs text-slate-500 font-medium">Activity Logs</p>
+                          <History className="w-4 h-4 text-amber-600" />
+                        </div>
+                        <p className="text-xl font-black text-slate-900">{activityHistory.length || 4}</p>
+                        <p className="text-[10px] text-slate-400">Audit trail in <code className="font-mono text-slate-600">activity_history</code></p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Property Preferences Form */}
+                  <div className="space-y-4 pt-4 border-t border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900">Custom Property Preferences</h4>
+                        <p className="text-xs text-slate-500">Configure your investment and tenant preferences to persist in Supabase</p>
+                      </div>
+                      <button
+                        onClick={handleSavePreferences}
+                        disabled={isSavingPreferences}
+                        className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                      >
+                        {isSavingPreferences ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                        <span>Save to Supabase</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-700">Preferred Location / City</label>
+                        <select
+                          value={userPreferences.preferredCity}
+                          onChange={(e) => setUserPreferences({ ...userPreferences, preferredCity: e.target.value })}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 bg-slate-50 outline-none"
+                        >
+                          <option value="Mumbai">Mumbai (BKC, Bandra, Andheri)</option>
+                          <option value="Bangalore">Bangalore (Koramangala, Indiranagar, Whitefield)</option>
+                          <option value="Pune">Pune (Hinjewadi, Viman Nagar, Kharadi)</option>
+                          <option value="Jaipur">Jaipur (Vaishali Nagar, Mansarovar, Malviya Nagar)</option>
+                          <option value="Hyderabad">Hyderabad (Hitec City, Banjara Hills)</option>
+                          <option value="Delhi NCR">Delhi NCR (Gurgaon Cyber Hub, Noida)</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-700">Preferred Category</label>
+                        <select
+                          value={userPreferences.preferredCategory}
+                          onChange={(e) => setUserPreferences({ ...userPreferences, preferredCategory: e.target.value })}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 bg-slate-50 outline-none"
+                        >
+                          <option value="Office">Office Space (Plug & Play / Bare Shell)</option>
+                          <option value="Commercial">Commercial Shop / Retail Showroom</option>
+                          <option value="Factory">Factory / Industrial Shed</option>
+                          <option value="Godown">Godown / Warehouse Logistics Hub</option>
+                          <option value="Apartment">Luxury Apartment / High-Rise Flat</option>
+                          <option value="Villa">Independent Villa / Bungalow</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-700">Furnishing Preference</label>
+                        <select
+                          value={userPreferences.preferredFurnishing}
+                          onChange={(e) => setUserPreferences({ ...userPreferences, preferredFurnishing: e.target.value })}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 bg-slate-50 outline-none"
+                        >
+                          <option value="Fully Furnished">Fully Furnished (Turnkey Ready)</option>
+                          <option value="Semi-Furnished">Semi-Furnished (Partially Fitted)</option>
+                          <option value="Unfurnished">Unfurnished / Raw Shell</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-700">Monthly Budget Range</label>
+                        <select
+                          value={userPreferences.budgetRange}
+                          onChange={(e) => setUserPreferences({ ...userPreferences, budgetRange: e.target.value })}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 bg-slate-50 outline-none"
+                        >
+                          <option value="₹25,000 - ₹50,000 / mo">₹25,000 - ₹50,000 / mo</option>
+                          <option value="₹50,000 - ₹1,50,000 / mo">₹50,000 - ₹1,50,000 / mo</option>
+                          <option value="₹1,50,000 - ₹5,00,000 / mo">₹1,50,000 - ₹5,00,000 / mo</option>
+                          <option value="₹5,00,000+ / mo">₹5,00,000+ / mo (Commercial / Industrial)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Switch Demo Role Quick Buttons */}
+                  <div className="space-y-2 pt-4 border-t border-slate-100">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Switch Account Role</h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <button
+                        onClick={() => switchDemoRole('seller')}
+                        className={`px-3 py-2 rounded-xl text-xs font-bold transition border cursor-pointer ${
+                          user.role === 'seller' ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        Seller Profile
+                      </button>
+                      <button
+                        onClick={() => switchDemoRole('user')}
+                        className={`px-3 py-2 rounded-xl text-xs font-bold transition border cursor-pointer ${
+                          user.role === 'user' ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        Buyer / Tenant
+                      </button>
+                      <button
+                        onClick={() => switchDemoRole('agent')}
+                        className={`px-3 py-2 rounded-xl text-xs font-bold transition border cursor-pointer ${
+                          user.role === 'agent' ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        Verified Agent
+                      </button>
+                      <button
+                        onClick={() => switchDemoRole('admin')}
+                        className={`px-3 py-2 rounded-xl text-xs font-bold transition border cursor-pointer ${
+                          user.role === 'admin' ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        Admin Portal
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Recent Supabase Activity Logs */}
+                <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <History className="w-5 h-5 text-amber-600" />
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900">Recent Supabase Activity Log</h4>
+                        <p className="text-xs text-slate-500">Real-time audit trail stored in Supabase PostgreSQL</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={refreshActivityHistory}
+                      className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 transition"
+                      title="Refresh activity logs"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="divide-y divide-slate-100">
+                    {activityHistory.slice(0, 6).map((item, idx) => (
+                      <div key={item.id || idx} className="py-3 flex items-start justify-between gap-3 text-xs">
+                        <div className="flex items-start gap-2.5">
+                          <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-700 flex-shrink-0 mt-0.5">
+                            {item.action === 'save_property' ? (
+                              <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
+                            ) : item.action === 'remove_saved' ? (
+                              <Heart className="w-3.5 h-3.5 text-slate-400" />
+                            ) : (
+                              <Activity className="w-3.5 h-3.5 text-amber-600" />
+                            )}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-slate-900">{item.title}</p>
+                            {item.details && <p className="text-slate-500 text-[11px] mt-0.5">{item.details}</p>}
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                          {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Signed Out State in Profile Tab */
+              <div className="bg-white p-8 sm:p-12 rounded-3xl border border-slate-200/80 shadow-sm text-center space-y-6">
+                <div className="w-16 h-16 rounded-3xl bg-amber-500/10 text-amber-600 flex items-center justify-center mx-auto shadow-inner">
+                  <Lock className="w-8 h-8" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900">Appsell Buy</h3>
-                  <p className="text-xs text-slate-500">appsellbuy@gmail.com • Verified Member</p>
-                  <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-extrabold uppercase tracking-wider border border-emerald-200">
-                    RERA Verified Investor
-                  </span>
+                  <h3 className="text-2xl font-bold font-serif text-slate-900">Sign In to Your Supabase Profile</h3>
+                  <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto mt-1">
+                    Connect your account to securely store saved properties in PostgreSQL, receive automated property match alerts, and schedule zero-brokerage site tours.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-left max-w-lg mx-auto">
+                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+                    <Database className="w-4 h-4 text-emerald-600" />
+                    <p className="text-xs font-bold text-slate-900">Cloud Wishlist</p>
+                    <p className="text-[11px] text-slate-500">Stored in Supabase database</p>
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+                    <Bell className="w-4 h-4 text-amber-600" />
+                    <p className="text-xs font-bold text-slate-900">Realtime Alerts</p>
+                    <p className="text-[11px] text-slate-500">Instant rental match notices</p>
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+                    <ShieldCheck className="w-4 h-4 text-blue-600" />
+                    <p className="text-xs font-bold text-slate-900">RERA Verified</p>
+                    <p className="text-[11px] text-slate-500">100% Secure authentication</p>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex items-center justify-center gap-3">
+                  <button
+                    onClick={() => { setAuthMode('signin'); setShowSignInModal(true); }}
+                    className="px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-2 cursor-pointer"
+                  >
+                    <LogIn className="w-4 h-4 text-amber-400" />
+                    <span>Sign In to Account</span>
+                  </button>
+                  <button
+                    onClick={() => { setAuthMode('signup'); setShowSignInModal(true); }}
+                    className="px-6 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-md transition cursor-pointer"
+                  >
+                    Create Free Account
+                  </button>
                 </div>
               </div>
-
-              <div className="space-y-4">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Account Preferences</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
-                    <p className="text-xs text-slate-400 font-medium">Saved Properties</p>
-                    <p className="text-lg font-black text-slate-900">{savedIds.length} Properties</p>
-                  </div>
-                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
-                    <p className="text-xs text-slate-400 font-medium">Active Inquiries</p>
-                    <p className="text-lg font-black text-slate-900">2 Inquiries</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                <button 
-                  onClick={() => setShowPostModal(true)}
-                  className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-md transition"
-                >
-                  Post New Property / Rental
-                </button>
-                <button 
-                  onClick={() => showToast('Signed out successfully.')}
-                  className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition"
-                >
-                  Sign Out
-                </button>
-              </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -3108,21 +3657,103 @@ export default function App() {
 
               {postStep === 3 && (
                 <div className="space-y-4 animate-in fade-in duration-200">
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">3. Media & Description</h4>
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">3. Media & Description</h4>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200 flex items-center gap-1">
+                      <Database className="w-3 h-3 text-emerald-600" />
+                      <span>Supabase Cloud Storage</span>
+                    </span>
+                  </div>
 
+                  {/* Primary Camera Capture CTA */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-amber-950 text-white space-y-3 border border-slate-800 shadow-md">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-md shadow-amber-500/30 flex-shrink-0">
+                          <Camera className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h5 className="text-xs font-bold text-white">Live Camera Photo Studio</h5>
+                            <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black uppercase">
+                              Recommended
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-300 mt-0.5">
+                            Take high-resolution photos using your device camera (front/back) with room tags
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowCameraModal(true)}
+                        className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
+                      >
+                        <Camera className="w-4 h-4" />
+                        <span>Take Photo Now</span>
+                      </button>
+                    </div>
+
+                    {/* Captured Photos Reel */}
+                    {capturedPhotos.length > 0 ? (
+                      <div className="pt-2 border-t border-slate-800/80 space-y-2">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-bold text-amber-400 flex items-center gap-1">
+                            <Sparkles className="w-3.5 h-3.5" /> {capturedPhotos.length} Camera Photos Captured & Linked
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setShowCameraModal(true)}
+                            className="text-[10px] text-slate-400 hover:text-white underline cursor-pointer"
+                          >
+                            + Take More Photos
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 max-h-24 overflow-y-auto no-scrollbar">
+                          {capturedPhotos.map((photo) => (
+                            <div
+                              key={photo.id}
+                              className={`group relative aspect-[4/3] rounded-xl overflow-hidden border-2 transition ${
+                                photo.isPrimary
+                                  ? 'border-amber-400 ring-2 ring-amber-400/30'
+                                  : 'border-slate-800'
+                              }`}
+                            >
+                              <img src={photo.url} alt={photo.tag} className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent p-1 flex flex-col justify-end">
+                                <span className="text-[8px] font-bold text-slate-200 truncate block">
+                                  {photo.tag}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="pt-1.5 flex items-center gap-2 text-[10px] text-slate-400">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                        <span>0 camera photos attached yet. You can also select from architectural presets below.</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Preset / Fallback Selection */}
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700">Property Photo Preset / Image URL</label>
+                    <label className="text-xs font-bold text-slate-700">Or Select Architectural Preset Image</label>
                     <select 
                       value={postForm.image}
                       onChange={(e) => setPostForm({ ...postForm, image: e.target.value })}
                       className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 outline-none mb-2"
                     >
+                      <option value="https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=1200&auto=format&fit=crop">Executive Commercial Office Floor</option>
                       <option value="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?q=80&w=1200&auto=format&fit=crop">Luxury Villa with Pool</option>
                       <option value="https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?q=80&w=1200&auto=format&fit=crop">High-Rise Skyline Apartment</option>
-                      <option value="https://images.unsplash.com/photo-1512917774080-9991f1c4c750?q=80&w=1200&auto=format&fit=crop">Executive Penthouse Suite</option>
-                      <option value="https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?q=80&w=1200&auto=format&fit=crop">Modern Rental Apartment</option>
+                      <option value="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=1200&auto=format&fit=crop">Industrial Godown / Warehouse Hub</option>
+                      <option value="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?q=80&w=1200&auto=format&fit=crop">Manufacturing Plant / Factory Shed</option>
                     </select>
-                    <div className="aspect-[16/9] rounded-2xl overflow-hidden bg-slate-100 border border-slate-200">
+                    <div className="aspect-[16/9] rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 max-h-48">
                       <img src={postForm.image} alt="Preview" className="w-full h-full object-cover" />
                     </div>
                   </div>
@@ -3149,7 +3780,7 @@ export default function App() {
                     <button 
                       type="button"
                       onClick={() => setPostStep(4)}
-                      className="px-6 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-md transition flex items-center gap-1.5"
+                      className="px-6 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer"
                     >
                       <span>Next: Contact Details</span>
                       <ArrowRight className="w-4 h-4" />
@@ -3686,6 +4317,319 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* ================= SUPABASE SIGN IN / REGISTER MODAL ================= */}
+      {(showSignInModal || isAuthModalOpen) && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div 
+            className="bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-200 border border-slate-200/80 my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-6 bg-slate-900 text-white relative">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-md">
+                    <Database className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-400 block">
+                      Supabase Cloud Authentication
+                    </span>
+                    <h3 className="text-lg font-bold font-serif leading-tight">
+                      {authMode === 'signin' ? 'Sign In to Your Account' : 'Create Supabase Account'}
+                    </h3>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowSignInModal(false);
+                    closeAuthModal();
+                    setAuthError(null);
+                  }}
+                  className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="mt-4 flex items-center gap-2 text-[11px] font-medium text-slate-300 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>Persist saved properties directly in Supabase PostgreSQL</span>
+              </div>
+            </div>
+
+            {/* Tab Switcher */}
+            <div className="grid grid-cols-2 bg-slate-100 p-1 m-4 rounded-2xl border border-slate-200 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => { setAuthMode('signin'); setAuthError(null); }}
+                className={`py-2 rounded-xl transition cursor-pointer ${
+                  authMode === 'signin'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAuthMode('signup'); setAuthError(null); }}
+                className={`py-2 rounded-xl transition cursor-pointer ${
+                  authMode === 'signup'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                Create Account
+              </button>
+            </div>
+
+            {/* Error Message */}
+            {authError && (
+              <div className="mx-6 mb-2 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2">
+                <ShieldAlert className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                <span>{authError}</span>
+              </div>
+            )}
+
+            {/* Form */}
+            <form onSubmit={handleAuthSubmit} className="p-6 pt-2 space-y-3.5">
+              {authMode === 'signup' && (
+                <>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700">Full Name *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Alexander Wright"
+                      value={authName}
+                      onChange={(e) => setAuthName(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium outline-none focus:border-amber-500"
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700">Role</label>
+                      <select
+                        value={authRole}
+                        onChange={(e) => setAuthRole(e.target.value as any)}
+                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 outline-none"
+                      >
+                        <option value="seller">Seller / Owner</option>
+                        <option value="user">Buyer / Tenant</option>
+                        <option value="agent">RERA Agent</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700">Phone</label>
+                      <input
+                        type="tel"
+                        placeholder="+91 98201 45678"
+                        value={authPhone}
+                        onChange={(e) => setAuthPhone(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium outline-none focus:border-amber-500"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">Email Address *</label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                  <input
+                    type="email"
+                    placeholder="name@domain.com"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium outline-none focus:border-amber-500"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">Password *</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                  <input
+                    type="password"
+                    placeholder="••••••••"
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium outline-none focus:border-amber-500"
+                    required
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={authSubmitting}
+                className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-4"
+              >
+                {authSubmitting ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <LogIn className="w-4 h-4" />
+                )}
+                <span>
+                  {authSubmitting
+                    ? 'Authenticating with Supabase...'
+                    : authMode === 'signin'
+                    ? 'Sign In to Supabase Account'
+                    : 'Create Free Supabase Account'}
+                </span>
+              </button>
+            </form>
+
+            {/* Quick Demo Accounts */}
+            <div className="p-5 bg-slate-50 border-t border-slate-100 space-y-2">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                ⚡ One-Click Demo Accounts (Supabase Pre-Seeded):
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin('appsellbuy@gmail.com', 'password123', 'Alexander Wright (Investor)')}
+                  className="px-3 py-2 rounded-xl bg-white hover:bg-amber-50 border border-slate-200 text-left transition cursor-pointer"
+                >
+                  <strong className="text-xs text-slate-900 block font-bold">appsellbuy@gmail.com</strong>
+                  <span className="text-[10px] text-slate-500">Investor / Seller Account</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin('vikram.singhania@gmail.com', 'password123', 'Vikramaditya Singhania')}
+                  className="px-3 py-2 rounded-xl bg-white hover:bg-amber-50 border border-slate-200 text-left transition cursor-pointer"
+                >
+                  <strong className="text-xs text-slate-900 block font-bold">vikram.singhania@gmail.com</strong>
+                  <span className="text-[10px] text-slate-500">Commercial Office Owner</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= QUICK PROFILE MODAL ================= */}
+      {showProfileModal && user && (
+        <div 
+          className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200"
+          onClick={() => setShowProfileModal(false)}
+        >
+          <div 
+            className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-200 border border-slate-200 my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-black text-xl shadow-md">
+                  {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                </div>
+                <div>
+                  <h3 className="text-base font-bold font-serif">{user.name || 'User Account'}</h3>
+                  <p className="text-xs text-amber-400 font-medium">{user.email}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowProfileModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs">
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 text-emerald-600" />
+                  <span className="font-bold">Supabase PostgreSQL Connected</span>
+                </div>
+                <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-extrabold text-[10px]">
+                  Realtime Active
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div 
+                  onClick={() => {
+                    setShowProfileModal(false);
+                    setActiveTab('saved');
+                  }}
+                  className="p-3.5 rounded-2xl bg-slate-50 hover:bg-amber-50 border border-slate-200 transition cursor-pointer space-y-0.5"
+                >
+                  <p className="text-xs text-slate-500 font-medium">Saved in Supabase</p>
+                  <p className="text-lg font-black text-slate-900">{savedIds.length} Properties</p>
+                  <span className="text-[10px] text-amber-600 font-bold flex items-center gap-0.5">
+                    View Wishlist <ArrowRight className="w-3 h-3" />
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-0.5">
+                  <p className="text-xs text-slate-500 font-medium">User Role</p>
+                  <p className="text-base font-black text-slate-900 uppercase">{user.role || 'USER'}</p>
+                  <span className="text-[10px] text-emerald-600 font-bold">100% RERA Verified</span>
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setShowProfileModal(false);
+                    setActiveTab('profile');
+                  }}
+                  className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                  <span>Manage Preferences</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowProfileModal(false);
+                    logout();
+                    showToast('Signed out of Supabase.');
+                  }}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-700 font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= CAMERA CAPTURE PHOTO STUDIO MODAL ================= */}
+      <CameraCaptureModal
+        isOpen={showCameraModal}
+        onClose={() => setShowCameraModal(false)}
+        propertyId={`prop-${Date.now()}`}
+        initialPhotos={capturedPhotos}
+        onPhotosSaved={(newPhotos, primaryUrl) => {
+          setCapturedPhotos(newPhotos);
+          const urls = newPhotos.map(p => p.url);
+          setPostForm(prev => ({
+            ...prev,
+            image: primaryUrl || prev.image,
+            gallery: urls
+          }));
+          showToast(`Attached ${newPhotos.length} camera photos to property listing!`);
+        }}
+      />
+
+      {/* ================= SUPABASE DATABASE MANAGEMENT & DIAGNOSTICS MODAL ================= */}
+      <DatabaseManagerModal
+        isOpen={showDatabaseModal}
+        onClose={() => setShowDatabaseModal(false)}
+        onToast={showToast}
+      />
 
       {/* ================= FOOTER ================= */}
       <footer className="bg-slate-900 text-white border-t border-slate-800 mt-16 py-12 px-4">

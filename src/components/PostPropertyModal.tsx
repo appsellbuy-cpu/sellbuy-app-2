@@ -19,12 +19,15 @@ import {
   Trash2,
   Star,
   Link,
-  Loader2
+  Loader2,
+  Camera,
+  Database
 } from 'lucide-react';
 import { INDIAN_CITIES } from '../utils/formatters';
 import { useProperties } from '../context/PropertyContext';
 import { AIPresentationCopilot } from './AIPresentationCopilot';
 import { useAuth } from '../context/AuthContext';
+import { CameraCaptureModal, CapturedPhoto } from './CameraCaptureModal';
 
 const JAIPUR_PRESETS = [
   { title: 'Luxury Villa Exterior', url: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1200&auto=format&fit=crop', tag: '4K UHD' },
@@ -62,6 +65,8 @@ export const PostPropertyModal: React.FC<PostPropertyModalProps> = ({ isOpen, on
   const [propertyAge, setPropertyAge] = useState('1-5 Years');
   const [smartSuggestEnabled, setSmartSuggestEnabled] = useState(true);
   const [isAnalyzingSuggest, setIsAnalyzingSuggest] = useState(false);
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [cameraPhotos, setCameraPhotos] = useState<CapturedPhoto[]>([]);
   const [imageUrl, setImageUrl] = useState('https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1200&auto=format&fit=crop');
   const [gallery, setGallery] = useState<string[]>([
     'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1200&auto=format&fit=crop'
@@ -838,9 +843,43 @@ export const PostPropertyModal: React.FC<PostPropertyModalProps> = ({ isOpen, on
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-800">
                 6. High-Resolution Property Gallery
               </label>
-              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wide bg-amber-50 text-amber-800 px-2.5 py-0.5 rounded-full border border-amber-200">
-                ⭐ {gallery.length} Photos Selected
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                  <Database className="w-3 h-3 text-emerald-600" /> Supabase Storage
+                </span>
+                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wide bg-amber-50 text-amber-800 px-2.5 py-0.5 rounded-full border border-amber-200">
+                  ⭐ {gallery.length} Photos Selected
+                </span>
+              </div>
+            </div>
+
+            {/* Live Camera Photo Studio Card */}
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 to-amber-950 text-white border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-md shadow-amber-500/20 flex-shrink-0">
+                  <Camera className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h5 className="text-xs font-bold text-white">Live Camera Photo Studio</h5>
+                    <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black uppercase">
+                      Direct Capture
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300">
+                    Snap crystal-clear photos with your device camera (front/back) & tag rooms directly into Supabase
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowCameraModal(true)}
+                className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
+              >
+                <Camera className="w-4 h-4" />
+                <span>Take Photo with Camera</span>
+              </button>
             </div>
 
             {/* Drag & Drop Main Zone */}
@@ -1086,6 +1125,21 @@ export const PostPropertyModal: React.FC<PostPropertyModalProps> = ({ isOpen, on
           </div>
         </form>
       </div>
+
+      {/* Camera Capture Photo Studio Modal */}
+      <CameraCaptureModal
+        isOpen={showCameraModal}
+        onClose={() => setShowCameraModal(false)}
+        propertyId={`prop-${Date.now()}`}
+        initialPhotos={cameraPhotos}
+        onPhotosSaved={(newPhotos, primaryUrl) => {
+          setCameraPhotos(newPhotos);
+          const urls = newPhotos.map(p => p.url);
+          setImageUrl(primaryUrl || urls[0]);
+          setGallery(prev => Array.from(new Set([...urls, ...prev])));
+          showToast(`Attached ${newPhotos.length} device camera photos to gallery!`);
+        }}
+      />
     </div>
   );
 };

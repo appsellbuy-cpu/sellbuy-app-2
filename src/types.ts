@@ -150,7 +150,7 @@ export interface ValuationRequest {
 export interface SavedListing {
   id: string;
   userId: string;
-  userEmail: string;
+  userEmail?: string;
   propertyId: string;
   property: Property;
   createdAt: string;

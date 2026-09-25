@@ -3,6 +3,15 @@ import { Property, PropertyCategory, PropertySortOption, ViewingBooking, Valuati
 import { INITIAL_PROPERTIES } from '../data/initialData';
 import { api } from '../services/api';
 import { useAuth } from './AuthContext';
+import { 
+  fetchPropertiesFromSupabase,
+  subscribeToPropertiesRealtime,
+  savePropertyToSupabase,
+  fetchUserSavedListings,
+  toggleUserSavedListing,
+  recordUserActivity,
+  isSupabaseConfigured
+} from '../lib/supabase';
 
 interface PropertyContextType {
   properties: Property[];
@@ -314,17 +323,56 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const loadProperties = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.getProperties();
-      if (data && data.length > 0) {
-        setProperties(data);
-        localStorage.setItem('navikx_properties', JSON.stringify(data));
+      // 1. Fetch from Supabase or API
+      const supaProps = await fetchPropertiesFromSupabase();
+      if (supaProps && supaProps.length > 0) {
+        setProperties(supaProps);
+        localStorage.setItem('navikx_properties', JSON.stringify(supaProps));
+      } else {
+        const data = await api.getProperties();
+        if (data && data.length > 0) {
+          setProperties(data);
+          localStorage.setItem('navikx_properties', JSON.stringify(data));
+        }
       }
     } catch (err) {
-      console.warn('Failed to load from API, keeping cached properties', err);
+      console.warn('Failed to load properties, keeping cached properties', err);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  // Realtime subscription to live Supabase Postgres events
+  useEffect(() => {
+    const subscription = subscribeToPropertiesRealtime(
+      (newProperty) => {
+        setProperties(prev => {
+          const exists = prev.some(p => p.id === newProperty.id);
+          if (exists) {
+            return prev.map(p => p.id === newProperty.id ? newProperty : p);
+          }
+          return [newProperty, ...prev];
+        });
+        showToast(`⚡ Realtime Sync: New listing "${newProperty.title}" updated!`);
+      },
+      (updatedProperty) => {
+        setProperties(prev => prev.map(p => p.id === updatedProperty.id ? updatedProperty : p));
+        if (selectedProperty?.id === updatedProperty.id) {
+          setSelectedProperty(updatedProperty);
+        }
+      },
+      (deletedId) => {
+        setProperties(prev => prev.filter(p => p.id !== deletedId));
+        if (selectedProperty?.id === deletedId) {
+          setSelectedProperty(null);
+        }
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [selectedProperty?.id]);
 
   const loadBookings = useCallback(async () => {
     try {
@@ -338,6 +386,13 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const loadSavedListings = useCallback(async () => {
     try {
+      if (user?.id) {
+        const supaSaved = await fetchUserSavedListings(user.id);
+        if (supaSaved && supaSaved.length > 0) {
+          setSavedListings(supaSaved);
+          return;
+        }
+      }
       const data = await api.getSavedListings(user?.id, user?.email);
       setSavedListings(data);
     } catch (err) {
@@ -362,6 +417,7 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [savedListings]);
 
   const toggleFavorite = useCallback(async (property: Property): Promise<boolean> => {
+    const userId = user?.id || 'user-default';
     const wasSaved = savedListings.some(s => s.propertyId === property.id);
     
     // Optimistic UI update
@@ -371,7 +427,7 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } else {
       const optimisticItem: SavedListing = {
         id: 'saved-opt-' + Date.now(),
-        userId: user?.id || 'user-default',
+        userId,
         userEmail: user?.email || 'appsellbuy@gmail.com',
         propertyId: property.id,
         property,
@@ -382,11 +438,12 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     try {
-      const result = await api.toggleSavedListing(property.id, property, user?.id, user?.email);
-      // Synchronize with server response
-      if (result.savedListing && !wasSaved) {
-        setSavedListings(prev => [result.savedListing!, ...prev.filter(s => s.propertyId !== property.id)]);
-      }
+      // 1. Persist to Supabase
+      const result = await toggleUserSavedListing(userId, property);
+      setSavedListings(result.savedListings);
+
+      // 2. Also notify backend API
+      await api.toggleSavedListing(property.id, property, user?.id, user?.email);
       return result.isSaved;
     } catch (err) {
       console.warn('Failed to toggle favorite on server:', err);
@@ -403,6 +460,9 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     showToast(`Removed "${title}" from Saved Listings`);
 
     try {
+      if (user?.id && target?.property) {
+        await toggleUserSavedListing(user.id, target.property);
+      }
       await api.removeSavedListing(propertyId, user?.id, user?.email);
       return true;
     } catch (err) {
