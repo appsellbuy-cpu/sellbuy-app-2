@@ -692,10 +692,10 @@ export default function App() {
   const [showSignInModal, setShowSignInModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
-  const [authEmail, setAuthEmail] = useState('appsellbuy@gmail.com');
-  const [authPassword, setAuthPassword] = useState('password123');
-  const [authName, setAuthName] = useState('Alexander Wright');
-  const [authPhone, setAuthPhone] = useState('+91 98201 45678');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authName, setAuthName] = useState('');
+  const [authPhone, setAuthPhone] = useState('');
   const [authRole, setAuthRole] = useState<'user' | 'agent' | 'seller'>('seller');
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSubmitting, setAuthSubmitting] = useState(false);
@@ -1093,23 +1093,6 @@ export default function App() {
       closeAuthModal();
     } catch (err: any) {
       setAuthError(err?.message || 'Authentication failed. Please check credentials.');
-    } finally {
-      setAuthSubmitting(false);
-    }
-  };
-
-  const handleQuickLogin = async (email: string, pass: string, name: string) => {
-    setAuthError(null);
-    setAuthSubmitting(true);
-    setAuthEmail(email);
-    setAuthPassword(pass);
-    try {
-      await login(email, pass);
-      showToast(`Signed in as ${name} (Supabase Connected)`);
-      setShowSignInModal(false);
-      closeAuthModal();
-    } catch (err: any) {
-      setAuthError(err?.message || 'Quick login failed');
     } finally {
       setAuthSubmitting(false);
     }
@@ -4627,32 +4610,11 @@ export default function App() {
               </button>
             </form>
 
-            {/* Quick Demo Accounts */}
-            <div className="p-5 bg-slate-50 border-t border-slate-100 space-y-2">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                ⚡ One-Click Demo Accounts (Supabase Pre-Seeded):
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('appsellbuy@gmail.com', 'password123', 'Alexander Wright (Investor)')}
-                  className="px-3 py-2 rounded-xl bg-white hover:bg-amber-50 border border-slate-200 text-left transition cursor-pointer"
-                >
-                  <strong className="text-xs text-slate-900 block font-bold">appsellbuy@gmail.com</strong>
-                  <span className="text-[10px] text-slate-500">Investor / Seller Account</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('vikram.singhania@gmail.com', 'password123', 'Vikramaditya Singhania')}
-                  className="px-3 py-2 rounded-xl bg-white hover:bg-amber-50 border border-slate-200 text-left transition cursor-pointer"
-                >
-                  <strong className="text-xs text-slate-900 block font-bold">vikram.singhania@gmail.com</strong>
-                  <span className="text-[10px] text-slate-500">Commercial Office Owner</span>
-                </button>
-              </div>
-            </div>
-          </div>
+            <div className="p-5 bg-slate-50 border-t border-slate-100">
+              <p className="text-[10px] font-semibold text-slate-500">
+                Use your own Supabase account. Demo credentials are not bundled with the production database.
+              </p>
+            </div>          </div>
         </div>
       )}
 
