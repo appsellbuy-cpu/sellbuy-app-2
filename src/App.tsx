@@ -55,11 +55,16 @@ import {
   Globe,
   Camera,
   UploadCloud,
-  Trash2
+  Trash2,
+  MessageSquare,
+  Pencil
 } from 'lucide-react';
 import { PropertyLeafletMap } from './components/PropertyLeafletMap';
 import { CameraCaptureModal, CapturedPhoto } from './components/CameraCaptureModal';
 import { DatabaseManagerModal } from './components/DatabaseManagerModal';
+import { InquiryModal } from './components/InquiryModal';
+import { PropertyValuationModal } from './components/PropertyValuationModal';
+import { EditPropertyModal } from './components/EditPropertyModal';
 import { useAuth } from './context/AuthContext';
 import { 
   fetchUserSavedListings, 
@@ -84,6 +89,9 @@ interface Property {
   priceDisplay: string;
   type: string; // Apartment, Villa, Penthouse, Studio, PG, Office, Commercial, Factory, Godown, Plot
   purpose: 'buy' | 'rent';
+  category?: string;
+  listingType?: string;
+  locality?: string;
   beds: number;
   baths: number;
   area: number; // sqft
@@ -99,6 +107,12 @@ interface Property {
   furnishing?: 'Fully Furnished' | 'Semi-Furnished' | 'Unfurnished' | 'Bare Shell' | string;
   deposit?: number;
   coordinates?: { lat: number; lng: number };
+  ownerId?: string;
+  ownerName?: string;
+  ownerPhone?: string;
+  status?: 'active' | 'pending' | 'sold' | 'rented';
+  createdAt?: string;
+  virtualTourUrl?: string;
 }
 
 const mapSupabasePropertyToAppProperty = (property: any): Property => ({
@@ -110,6 +124,9 @@ const mapSupabasePropertyToAppProperty = (property: any): Property => ({
   priceDisplay: property.priceDisplay || `₹${Number(property.price || 0).toLocaleString('en-IN')}`,
   type: property.category || 'Apartment',
   purpose: property.listingType === 'rent' ? 'rent' : 'buy',
+  category: property.category,
+  listingType: property.listingType,
+  locality: property.locality,
   beds: Number(property.beds || 0),
   baths: Number(property.baths || 0),
   area: Number(property.sqft || 0),
@@ -124,7 +141,13 @@ const mapSupabasePropertyToAppProperty = (property: any): Property => ({
   role: property.role,
   furnishing: property.furnishing,
   deposit: property.deposit == null ? undefined : Number(property.deposit),
-  coordinates: property.coordinates
+  coordinates: property.coordinates,
+  ownerId: property.ownerId,
+  ownerName: property.ownerName,
+  ownerPhone: property.ownerPhone,
+  status: property.status,
+  createdAt: property.createdAt,
+  virtualTourUrl: property.virtualTourUrl
 });
 
 const normalizePropertyCategory = (type: string): string => {
@@ -704,6 +727,9 @@ export default function App() {
 
   const [showCameraModal, setShowCameraModal] = useState(false);
   const [showDatabaseModal, setShowDatabaseModal] = useState(false);
+  const [showInquiryModal, setShowInquiryModal] = useState(false);
+  const [showValuationModal, setShowValuationModal] = useState(false);
+  const [showEditPropertyModal, setShowEditPropertyModal] = useState(false);
   const [capturedPhotos, setCapturedPhotos] = useState<CapturedPhoto[]>([]);
 
   const [postForm, setPostForm] = useState({
@@ -1091,6 +1117,22 @@ export default function App() {
     }
   };
 
+  const openPostPropertyFlow = () => {
+    if (isSupabaseActive && !user?.id) {
+      setAuthMode('signin');
+      setShowSignInModal(true);
+      return;
+    }
+
+    setPostForm(prev => ({
+      ...prev,
+      ownerName: user?.name || prev.ownerName,
+      phone: user?.phone || prev.phone,
+      email: user?.email || prev.email
+    }));
+    openPostPropertyFlow();
+  };
+
   const handleSavePreferences = async () => {
     setIsSavingPreferences(true);
     try {
@@ -1182,9 +1224,11 @@ export default function App() {
       ? (numPrice >= 10000000 ? `₹${(numPrice / 10000000).toFixed(2)} Cr` : `₹${(numPrice / 100000).toFixed(1)} Lakh`)
       : `₹${Number(postForm.price).toLocaleString()} / mo`;
 
-    const finalGallery = postForm.gallery && postForm.gallery.length > 0 
-      ? postForm.gallery 
+    const finalGallery = postForm.gallery && postForm.gallery.length > 0
+      ? postForm.gallery
       : [postForm.image];
+
+    const cameraPhotoByUrl = new Map(capturedPhotos.map(photo => [photo.url, photo]));
 
     const newProp: Property = {
       id: `prop-${Date.now()}`,
@@ -1215,6 +1259,24 @@ export default function App() {
     }
 
     try {
+      const uploadedGallery: string[] = [];
+      for (let i = 0; i < finalGallery.length; i += 1) {
+        const galleryImage = finalGallery[i];
+        if (isSupabaseActive && galleryImage.startsWith('data:')) {
+          const photoTag = cameraPhotoByUrl.get(galleryImage)?.tag || `photo-${i + 1}`;
+          const upload = await uploadPropertyPhotoToSupabase(galleryImage, newProp.id, photoTag);
+          uploadedGallery.push(upload.url);
+        } else {
+          uploadedGallery.push(galleryImage);
+        }
+      }
+
+      const primarySourceUrl = capturedPhotos.find(photo => photo.isPrimary)?.url;
+      const primaryIndex = primarySourceUrl ? finalGallery.indexOf(primarySourceUrl) : -1;
+      const resolvedImage = primaryIndex >= 0
+        ? uploadedGallery[primaryIndex]
+        : (uploadedGallery[0] || newProp.image);
+
       const saved = await savePropertyToSupabase({
         id: newProp.id,
         title: newProp.title,
@@ -1229,8 +1291,8 @@ export default function App() {
         sqft: newProp.area,
         carpetArea: newProp.area,
         furnishing: newProp.furnishing,
-        image: newProp.image,
-        gallery: newProp.gallery,
+        image: resolvedImage,
+        gallery: uploadedGallery,
         description: newProp.description,
         featured: newProp.featured,
         reraId: newProp.reraId,
@@ -1501,7 +1563,7 @@ export default function App() {
               <Database className="w-4 h-4" />
             </button>
             <button 
-              onClick={() => setShowPostModal(true)}
+              onClick={() => openPostPropertyFlow()}
               className="hidden sm:flex px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-md transition items-center gap-1.5 cursor-pointer"
             >
               <PlusCircle className="w-4 h-4" />
@@ -1595,7 +1657,7 @@ export default function App() {
                 { title: 'Explore All', desc: 'Browse verified listings', icon: Compass, tab: 'explore', purpose: 'all' },
                 { title: 'Buy Properties', desc: 'Luxury villas & apartments', icon: Building2, tab: 'explore', purpose: 'buy' },
                 { title: 'Rent Properties', desc: 'Move-in ready rentals', icon: Key, tab: 'rent-properties', purpose: 'rent' },
-                { title: 'Post Listing', desc: 'Sell or rent out free', icon: PlusCircle, action: () => setShowPostModal(true) },
+                { title: 'Post Listing', desc: 'Sell or rent out free', icon: PlusCircle, action: () => openPostPropertyFlow() },
               ].map((cat, idx) => (
                 <div 
                   key={idx}
@@ -4705,7 +4767,6 @@ export default function App() {
       <CameraCaptureModal
         isOpen={showCameraModal}
         onClose={() => setShowCameraModal(false)}
-        propertyId={`prop-${Date.now()}`}
         initialPhotos={capturedPhotos}
         onPhotosSaved={(newPhotos, primaryUrl) => {
           setCapturedPhotos(newPhotos);
@@ -4747,7 +4808,7 @@ export default function App() {
               <li><button onClick={() => setActiveTab('home')} className="hover:text-amber-400 transition">Home</button></li>
               <li><button onClick={() => { setSelectedPurpose('buy'); setActiveTab('explore'); }} className="hover:text-amber-400 transition">Buy Property</button></li>
               <li><button onClick={() => setActiveTab('rent-properties')} className="hover:text-amber-400 transition">Rent Properties Tab</button></li>
-              <li><button onClick={() => setShowPostModal(true)} className="hover:text-amber-400 transition">Post Property</button></li>
+              <li><button onClick={() => openPostPropertyFlow()} className="hover:text-amber-400 transition">Post Property</button></li>
               <li><button onClick={() => setActiveTab('contact')} className="hover:text-amber-400 transition">Contact Support</button></li>
             </ul>
           </div>
@@ -4811,7 +4872,7 @@ export default function App() {
           </button>
 
           <button 
-            onClick={() => setShowPostModal(true)}
+            onClick={() => openPostPropertyFlow()}
             className="flex flex-col items-center justify-center py-1.5 rounded-xl transition text-slate-500 hover:text-slate-900"
           >
             <PlusCircle className="w-5 h-5 text-amber-600" />
