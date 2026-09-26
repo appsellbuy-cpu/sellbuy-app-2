@@ -198,18 +198,16 @@ export const savePropertyToSupabase = async (property: Partial<Property>, user?:
         .select()
         .single();
 
-      if (error) {
-        console.warn('Supabase upsert property error:', error.message);
-      } else if (data) {
-        return mapSupabaseRowToProperty(data);
-      }
+      if (error) throw error;
+      if (data) return mapSupabaseRowToProperty(data);
+      throw new Error('Supabase did not return the saved property.');
     } catch (err) {
       console.error('Error saving property to Supabase:', err);
+      throw err;
     }
   }
 
-  const savedProp: Property = mapSupabaseRowToProperty(formattedRow);
-  return savedProp;
+  return mapSupabaseRowToProperty(formattedRow);
 };
 
 export const deletePropertyFromSupabase = async (propertyId: string): Promise<boolean> => {
@@ -219,9 +217,11 @@ export const deletePropertyFromSupabase = async (propertyId: string): Promise<bo
         .from('properties')
         .delete()
         .eq('id', propertyId);
-      if (!error) return true;
+      if (error) throw error;
+      return true;
     } catch (err) {
-      console.warn('Supabase delete error:', err);
+      console.error('Supabase delete error:', err);
+      throw err;
     }
   }
   return true;
@@ -361,17 +361,17 @@ export const fetchUserSavedListings = async (userId: string): Promise<SavedListi
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
-      if (!error && data) {
-        return data.map(item => ({
-          id: item.id,
-          userId: item.user_id,
-          propertyId: item.property_id,
-          property: typeof item.property_data === 'string' ? JSON.parse(item.property_data) : item.property_data,
-          createdAt: item.created_at
-        }));
-      }
+      if (error) throw error;
+      return (data || []).map(item => ({
+        id: item.id,
+        userId: item.user_id,
+        propertyId: item.property_id,
+        property: typeof item.property_data === 'string' ? JSON.parse(item.property_data) : item.property_data,
+        createdAt: item.created_at
+      }));
     } catch (err) {
-      console.warn('Failed to fetch saved listings from Supabase:', err);
+      console.error('Failed to fetch saved listings from Supabase:', err);
+      throw err;
     }
   }
 
