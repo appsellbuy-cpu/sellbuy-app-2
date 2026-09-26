@@ -902,6 +902,12 @@ export const supabaseAuth = {
     }
   },
 
+  async updatePassword(password: string) {
+    if (!isSupabaseConfigured()) return;
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+  },
+
   async getSession() {
     if (isSupabaseConfigured()) {
       const { data } = await supabase.auth.getSession();
