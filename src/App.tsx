@@ -74,6 +74,7 @@ import {
   fetchUserActivityHistory,
   savePropertyToSupabase,
   uploadPropertyPhotoToSupabase,
+  deletePropertyFromSupabase,
   fetchPropertiesFromSupabase,
   subscribeToPropertiesRealtime,
   createViewingBookingRecord,
@@ -1154,6 +1155,36 @@ export default function App() {
     }
   };
 
+  const handleDeleteSelectedProperty = async () => {
+    if (!selectedProperty) return;
+
+    const canManage = user?.role === 'admin' || user?.id === selectedProperty.ownerId;
+    if (!canManage) {
+      showToast('Only the property owner can delete this listing.');
+      return;
+    }
+
+    try {
+      if (isSupabaseActive) {
+        await deletePropertyFromSupabase(selectedProperty.id);
+      }
+
+      setProperties(prev => prev.filter(property => property.id !== selectedProperty.id));
+      if (user?.id) {
+        await recordUserActivity(
+          user.id,
+          'post_property',
+          `Deleted property listing "${selectedProperty.title}"`,
+          selectedProperty
+        );
+      }
+      setSelectedProperty(null);
+      showToast('Property deleted successfully.');
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to delete property.');
+    }
+  };
+
   const toggleCompare = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setCompareIds(prev => {
@@ -1641,12 +1672,22 @@ export default function App() {
                       className="w-full text-xs font-semibold text-slate-900 bg-transparent outline-none"
                     />
                   </div>
-                  <button 
-                    onClick={() => setActiveTab('explore')}
-                    className="w-full sm:w-auto px-6 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-md transition shrink-0"
-                  >
-                    Search Homes
-                  </button>
+                  <div className="flex w-full sm:w-auto gap-2">
+                    <button
+                      onClick={() => setActiveTab('explore')}
+                      className="flex-1 sm:flex-none px-6 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-md transition shrink-0"
+                    >
+                      Search Homes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowValuationModal(true)}
+                      className="flex-1 sm:flex-none px-4 py-3 bg-slate-900/90 hover:bg-slate-800 text-white font-bold text-xs rounded-xl border border-slate-700 transition shrink-0 flex items-center justify-center gap-1.5"
+                    >
+                      <Calculator className="w-4 h-4 text-amber-400" />
+                      Valuation
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -4284,7 +4325,34 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-100 flex items-center gap-2 sm:gap-3">
+              <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center gap-2 sm:gap-3">
+                <button
+                  onClick={() => setShowInquiryModal(true)}
+                  className="flex-1 min-w-[130px] py-3 rounded-xl border border-slate-200 bg-white hover:bg-amber-50 text-slate-800 text-xs font-bold transition flex items-center justify-center gap-2"
+                >
+                  <MessageSquare className="w-4 h-4 text-amber-600" />
+                  <span>Inquiry</span>
+                </button>
+
+                {(user?.role === 'admin' || user?.id === selectedProperty.ownerId) && (
+                  <>
+                    <button
+                      onClick={() => setShowEditPropertyModal(true)}
+                      className="py-3 px-4 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold transition flex items-center justify-center gap-1.5"
+                    >
+                      <Pencil className="w-4 h-4 text-amber-600" />
+                      <span>Edit</span>
+                    </button>
+                    <button
+                      onClick={handleDeleteSelectedProperty}
+                      className="py-3 px-4 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition flex items-center justify-center gap-1.5"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Delete</span>
+                    </button>
+                  </>
+                )}
+
                 <button
                   onClick={() => toggleSave(selectedProperty.id)}
                   className={`flex-1 py-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 ${
@@ -4762,6 +4830,29 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <InquiryModal
+        property={selectedProperty}
+        onClose={() => setShowInquiryModal(false)}
+      />
+
+      <PropertyValuationModal
+        isOpen={showValuationModal}
+        onClose={() => setShowValuationModal(false)}
+      />
+
+      <EditPropertyModal
+        property={selectedProperty}
+        onClose={() => setShowEditPropertyModal(false)}
+        onSaved={(updated) => {
+          const updatedProperty = mapSupabasePropertyToAppProperty(updated);
+          setProperties(prev => prev.map(property =>
+            property.id === updatedProperty.id ? updatedProperty : property
+          ));
+          setSelectedProperty(updatedProperty);
+          showToast('Property changes synced to Supabase.');
+        }}
+      />
 
       {/* ================= CAMERA CAPTURE PHOTO STUDIO MODAL ================= */}
       <CameraCaptureModal
