@@ -36,6 +36,7 @@ export const PropertyValuationModal: React.FC<PropertyValuationModalProps> = ({ 
     try {
       const res = await submitValuation({
         location: city,
+        locality,
         propertyType,
         name: userName || 'Valued User',
         phone: userPhone,
