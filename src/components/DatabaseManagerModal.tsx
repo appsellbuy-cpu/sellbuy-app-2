@@ -26,6 +26,7 @@ import {
   getSupabaseUrl,
   getDatabaseStatistics,
   seedInitialPropertiesToSupabase,
+  runSupabaseDiagnostics,
   DatabaseStats
 } from '../lib/supabase';
 
@@ -118,22 +119,30 @@ Do not run the legacy schema SQL from this UI; the live database has production 
       realtimeChannel: 'pending'
     });
 
-    await new Promise(r => setTimeout(r, 400));
-    setDiagnosticResults(prev => ({ ...prev, connection: 'success' }));
+    try {
+      const result = await runSupabaseDiagnostics();
+      setDiagnosticResults({
+        connection: result.connection ? 'success' : 'failed',
+        propertiesTable: result.propertiesTable ? 'success' : 'failed',
+        savedTable: result.savedTable ? 'success' : 'failed',
+        storageBucket: result.storageBucket ? 'success' : 'failed',
+        realtimeChannel: result.realtimeChannel ? 'success' : 'failed'
+      });
 
-    await new Promise(r => setTimeout(r, 400));
-    setDiagnosticResults(prev => ({ ...prev, propertiesTable: 'success' }));
-
-    await new Promise(r => setTimeout(r, 350));
-    setDiagnosticResults(prev => ({ ...prev, savedTable: 'success' }));
-
-    await new Promise(r => setTimeout(r, 350));
-    setDiagnosticResults(prev => ({ ...prev, storageBucket: 'success' }));
-
-    await new Promise(r => setTimeout(r, 350));
-    setDiagnosticResults(prev => ({ ...prev, realtimeChannel: 'success' }));
-    setDiagnosticRunning(false);
-    onToast('Database diagnostics passed: All 5 services verified operational.');
+      const passed = Object.values(result).filter(Boolean).length;
+      onToast('Supabase diagnostics: ' + passed + '/5 checks passed.');
+    } catch (err: any) {
+      setDiagnosticResults(prev => ({
+        connection: 'failed',
+        propertiesTable: prev.propertiesTable === 'success' ? 'success' : 'failed',
+        savedTable: prev.savedTable === 'success' ? 'success' : 'failed',
+        storageBucket: prev.storageBucket === 'success' ? 'success' : 'failed',
+        realtimeChannel: prev.realtimeChannel === 'success' ? 'success' : 'failed'
+      }));
+      onToast(err?.message || 'Supabase diagnostics failed.');
+    } finally {
+      setDiagnosticRunning(false);
+    }
   };
 
   if (!isOpen) return null;

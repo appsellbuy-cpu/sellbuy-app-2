@@ -227,6 +227,60 @@ export const deletePropertyFromSupabase = async (propertyId: string): Promise<bo
   return true;
 };
 
+export interface DatabaseDiagnostics {
+  connection: boolean;
+  propertiesTable: boolean;
+  savedTable: boolean;
+  storageBucket: boolean;
+  realtimeChannel: boolean;
+}
+
+export const runSupabaseDiagnostics = async (): Promise<DatabaseDiagnostics> => {
+  const result: DatabaseDiagnostics = {
+    connection: false,
+    propertiesTable: false,
+    savedTable: false,
+    storageBucket: false,
+    realtimeChannel: false
+  };
+
+  if (!isSupabaseConfigured()) return result;
+
+  const connection = await supabase.from('properties').select('id', { count: 'exact', head: true });
+  result.connection = !connection.error;
+  result.propertiesTable = !connection.error;
+
+  const saved = await supabase.from('saved_properties').select('id', { count: 'exact', head: true });
+  result.savedTable = !saved.error;
+
+  result.storageBucket = await new Promise<boolean>((resolve) => {
+    const url = supabase.storage.from('property-photos').getPublicUrl('__diagnostic__').data.publicUrl;
+    fetch(url, { method: 'HEAD' })
+      .then(response => resolve(response.status === 200 || response.status === 206 || response.status === 404))
+      .catch(() => resolve(false));
+  });
+
+  result.realtimeChannel = await new Promise<boolean>((resolve) => {
+    let settled = false;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      void supabase.removeChannel(channel);
+      resolve(ok);
+    };
+    const channel = supabase
+      .channel('supabase_diagnostics_' + Date.now())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'properties' }, () => {})
+      .subscribe(status => {
+        if (status === 'SUBSCRIBED') finish(true);
+        else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') finish(false);
+      });
+    window.setTimeout(() => finish(false), 5000);
+  });
+
+  return result;
+};
+
 // Seed initial rich catalog into Supabase PostgreSQL
 export const seedInitialPropertiesToSupabase = async (): Promise<{ count: number; success: boolean; message: string }> => {
   if (!isSupabaseConfigured()) {

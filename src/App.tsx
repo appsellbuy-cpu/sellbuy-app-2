@@ -71,6 +71,7 @@ import {
   uploadPropertyPhotoToSupabase,
   fetchPropertiesFromSupabase,
   subscribeToPropertiesRealtime,
+  createViewingBookingRecord,
   UserActivityRecord 
 } from './lib/supabase';
 
@@ -99,6 +100,48 @@ interface Property {
   deposit?: number;
   coordinates?: { lat: number; lng: number };
 }
+
+const mapSupabasePropertyToAppProperty = (property: any): Property => ({
+  id: property.id,
+  title: property.title,
+  location: property.location,
+  city: property.city,
+  price: Number(property.price || 0),
+  priceDisplay: property.priceDisplay || `₹${Number(property.price || 0).toLocaleString('en-IN')}`,
+  type: property.category || 'Apartment',
+  purpose: property.listingType === 'rent' ? 'rent' : 'buy',
+  beds: Number(property.beds || 0),
+  baths: Number(property.baths || 0),
+  area: Number(property.sqft || 0),
+  rating: 4.9,
+  image: property.image,
+  gallery: property.gallery || [],
+  description: property.description || '',
+  featured: Boolean(property.featured),
+  reraId: property.reraId,
+  possession: property.possessionStatus,
+  floor: property.floor,
+  role: property.role,
+  furnishing: property.furnishing,
+  deposit: property.deposit == null ? undefined : Number(property.deposit),
+  coordinates: property.coordinates
+});
+
+const normalizePropertyCategory = (type: string): string => {
+  const value = type.toLowerCase();
+  if (value.includes('apartment') || value.includes('flat')) return 'apartment';
+  if (value.includes('villa')) return 'villa';
+  if (value.includes('house')) return 'house';
+  if (value.includes('penthouse')) return 'apartment';
+  if (value.includes('studio')) return 'apartment';
+  if (value.includes('pg') || value.includes('hostel') || value.includes('co-living')) return 'pg';
+  if (value.includes('office')) return 'office';
+  if (value.includes('commercial') || value.includes('shop') || value.includes('retail')) return 'commercial';
+  if (value.includes('factory') || value.includes('industrial')) return 'factory';
+  if (value.includes('godown') || value.includes('warehouse') || value.includes('logistics')) return 'godown';
+  if (value.includes('plot') || value.includes('land')) return 'plot';
+  return 'office';
+};
 
 const DEMO_PROPERTIES: Property[] = [
   {
@@ -591,20 +634,12 @@ export default function App() {
 
   // Properties State (with LocalStorage persistence and auto-merge for demo commercial/industrial properties)
   const [properties, setProperties] = useState<Property[]>(() => {
+    if (isSupabaseConfigured()) return [];
     try {
       const saved = localStorage.getItem('nestify_properties');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          const existingIds = new Set(parsed.map((p: any) => p.id));
-          const missing = DEMO_PROPERTIES.filter(p => !existingIds.has(p.id));
-          if (missing.length > 0) {
-            const merged = [...parsed, ...missing];
-            localStorage.setItem('nestify_properties', JSON.stringify(merged));
-            return merged;
-          }
-          return parsed;
-        }
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {}
     return DEMO_PROPERTIES;
@@ -649,10 +684,10 @@ export default function App() {
   const [showSignInModal, setShowSignInModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
-  const [authEmail, setAuthEmail] = useState('appsellbuy@gmail.com');
-  const [authPassword, setAuthPassword] = useState('password123');
-  const [authName, setAuthName] = useState('Alexander Wright');
-  const [authPhone, setAuthPhone] = useState('+91 98201 45678');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authName, setAuthName] = useState('');
+  const [authPhone, setAuthPhone] = useState('');
   const [authRole, setAuthRole] = useState<'user' | 'agent' | 'seller'>('seller');
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSubmitting, setAuthSubmitting] = useState(false);
@@ -706,20 +741,14 @@ export default function App() {
         try {
           const supaSaved = await fetchUserSavedListings(user.id);
           if (isMounted) {
-            if (supaSaved && supaSaved.length > 0) {
-              setSavedIds(supaSaved.map(s => s.propertyId));
-            } else {
-              // Default demo saved IDs for initial experience
-              const defaultSaved = ['prop-1', 'prop-4'];
-              setSavedIds(defaultSaved);
-            }
+            setSavedIds(supaSaved.map(s => s.propertyId));
           }
         } catch (err) {
           console.warn('Supabase saved properties load error:', err);
         } finally {
           if (isMounted) setIsLoadingSaved(false);
         }
-      } else {
+      } else if (!isSupabaseActive) {
         // Anonymous guest fallback
         try {
           const guestSaved = localStorage.getItem('nestify_saved_ids');
@@ -727,12 +756,55 @@ export default function App() {
         } catch {
           setSavedIds(['prop-1', 'prop-4']);
         }
+      } else {
+        setSavedIds([]);
       }
     };
 
     loadSupabaseSaved();
     return () => { isMounted = false; };
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!isSupabaseActive) return;
+    let mounted = true;
+    const loadLiveProperties = async () => {
+      try {
+        const rows = await fetchPropertiesFromSupabase();
+        if (mounted) {
+          setProperties(rows.map(mapSupabasePropertyToAppProperty));
+        }
+      } catch (error) {
+        console.error('Failed to load live Supabase properties:', error);
+        if (mounted) setProperties([]);
+      }
+    };
+    void loadLiveProperties();
+
+    const subscription = subscribeToPropertiesRealtime(
+      property => {
+        if (!mounted) return;
+        setProperties(prev => {
+          const next = mapSupabasePropertyToAppProperty(property);
+          return [next, ...prev.filter(item => item.id !== next.id)];
+        });
+      },
+      property => {
+        if (!mounted) return;
+        const next = mapSupabasePropertyToAppProperty(property);
+        setProperties(prev => prev.map(item => item.id === next.id ? next : item));
+      },
+      deletedId => {
+        if (!mounted) return;
+        setProperties(prev => prev.filter(item => item.id !== deletedId));
+      }
+    );
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [isSupabaseActive]);
 
   // Modal Detail State & Media Tab
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
@@ -1019,23 +1091,6 @@ export default function App() {
     }
   };
 
-  const handleQuickLogin = async (email: string, pass: string, name: string) => {
-    setAuthError(null);
-    setAuthSubmitting(true);
-    setAuthEmail(email);
-    setAuthPassword(pass);
-    try {
-      await login(email, pass);
-      showToast(`Signed in as ${name} (Supabase Connected)`);
-      setShowSignInModal(false);
-      closeAuthModal();
-    } catch (err: any) {
-      setAuthError(err?.message || 'Quick login failed');
-    } finally {
-      setAuthSubmitting(false);
-    }
-  };
-
   const handleSavePreferences = async () => {
     setIsSavingPreferences(true);
     try {
@@ -1106,7 +1161,7 @@ export default function App() {
     setContactSubmitted(false);
   };
 
-  const handlePostPropertySubmit = (e: React.FormEvent) => {
+  const handlePostPropertySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!postForm.title || !postForm.location || !postForm.price || !postForm.ownerName || !postForm.phone) {
       showToast('Please fill in all required property & contact details.');
@@ -1154,29 +1209,63 @@ export default function App() {
       furnishing: postForm.furnishing || 'Fully Furnished'
     };
 
-    const updated = [newProp, ...properties];
-    setProperties(updated);
-    try {
-      localStorage.setItem('nestify_properties', JSON.stringify(updated));
-    } catch {}
+    if (isSupabaseActive && !user?.id) {
+      showToast('Please sign in before posting a property.');
+      return;
+    }
 
-    // Persist property and photos directly to Supabase cloud database
-    (async () => {
+    try {
+      const saved = await savePropertyToSupabase({
+        id: newProp.id,
+        title: newProp.title,
+        location: newProp.location,
+        city: newProp.city,
+        price: newProp.price,
+        priceDisplay: newProp.priceDisplay,
+        category: normalizePropertyCategory(newProp.type),
+        listingType: newProp.purpose,
+        beds: newProp.beds,
+        baths: newProp.baths,
+        sqft: newProp.area,
+        carpetArea: newProp.area,
+        furnishing: newProp.furnishing,
+        image: newProp.image,
+        gallery: newProp.gallery,
+        description: newProp.description,
+        featured: newProp.featured,
+        reraId: newProp.reraId,
+        possessionStatus: newProp.possession,
+        floor: newProp.floor,
+        role: newProp.role,
+        deposit: newProp.deposit,
+        ownerId: user?.id,
+        ownerName: postForm.ownerName,
+        ownerPhone: postForm.phone,
+        verified: true,
+        zeroBrokerage: true,
+        postedBy: 'Owner',
+        status: 'active'
+      } as any, user);
+
+      const savedAppProperty = mapSupabasePropertyToAppProperty(saved);
+      setProperties(prev => [savedAppProperty, ...prev.filter(item => item.id !== savedAppProperty.id)]);
       try {
-        await savePropertyToSupabase(newProp as any, user);
-        if (user?.id) {
-          await recordUserActivity(
-            user.id,
-            'post_property',
-            `Listed "${newProp.title}" with ${finalGallery.length} camera photos in Supabase`,
-            newProp as any
-          );
-          refreshActivityHistory();
-        }
-      } catch (err) {
-        console.warn('Failed to save listing to Supabase database:', err);
+        localStorage.setItem('nestify_properties', JSON.stringify([savedAppProperty, ...properties.filter(item => item.id !== savedAppProperty.id)]));
+      } catch {}
+
+      if (user?.id) {
+        await recordUserActivity(
+          user.id,
+          'post_property',
+          'Listed "' + savedAppProperty.title + '" with ' + finalGallery.length + ' camera photos in Supabase',
+          saved as any
+        );
+        await refreshActivityHistory();
       }
-    })();
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to save listing to Supabase database.');
+      return;
+    }
 
     if (rentalReminderEnabled && newProp.purpose === 'rent' && matchesRentalCriteria(newProp)) {
       showListingAlertToast(newProp);
@@ -4224,14 +4313,41 @@ export default function App() {
               </div>
             ) : (
               <form 
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
-                  if (!visitForm.name || !visitForm.phone || !visitForm.date) {
+                  if (!visitForm.name || !visitForm.phone || !visitForm.date || !visitProperty) {
                     showToast('Please fill in all required fields.');
                     return;
                   }
-                  setVisitSubmitted(true);
-                  showToast('Property visit scheduled successfully!');
+
+                  try {
+                    if (isSupabaseActive) {
+                      await createViewingBookingRecord({
+                        id: 'book-' + Date.now(),
+                        propertyId: visitProperty.id,
+                        propertyTitle: visitProperty.title,
+                        propertyLocation: visitProperty.location,
+                        propertyCity: visitProperty.city,
+                        propertyImage: visitProperty.image,
+                        propertyPrice: visitProperty.price,
+                        propertyListingType: visitProperty.purpose,
+                        userId: user?.id,
+                        userName: visitForm.name.trim(),
+                        userEmail: user?.email || 'guest@nestify.com',
+                        userPhone: visitForm.phone.trim(),
+                        preferredDate: visitForm.date,
+                        preferredTime: visitForm.time,
+                        tourType: visitForm.type === 'video' ? 'Live Video Tour' : 'In-Person Visit',
+                        notes: 'Booked from main property comparison/tour flow.',
+                        status: 'confirmed',
+                        createdAt: new Date().toISOString()
+                      });
+                    }
+                    setVisitSubmitted(true);
+                    showToast('Property visit scheduled successfully!');
+                  } catch (err: any) {
+                    showToast(err?.message || 'Failed to schedule property visit.');
+                  }
                 }}
                 className="p-6 space-y-4"
               >
@@ -4487,32 +4603,11 @@ export default function App() {
               </button>
             </form>
 
-            {/* Quick Demo Accounts */}
-            <div className="p-5 bg-slate-50 border-t border-slate-100 space-y-2">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                ⚡ One-Click Demo Accounts (Supabase Pre-Seeded):
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('appsellbuy@gmail.com', 'password123', 'Alexander Wright (Investor)')}
-                  className="px-3 py-2 rounded-xl bg-white hover:bg-amber-50 border border-slate-200 text-left transition cursor-pointer"
-                >
-                  <strong className="text-xs text-slate-900 block font-bold">appsellbuy@gmail.com</strong>
-                  <span className="text-[10px] text-slate-500">Investor / Seller Account</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('vikram.singhania@gmail.com', 'password123', 'Vikramaditya Singhania')}
-                  className="px-3 py-2 rounded-xl bg-white hover:bg-amber-50 border border-slate-200 text-left transition cursor-pointer"
-                >
-                  <strong className="text-xs text-slate-900 block font-bold">vikram.singhania@gmail.com</strong>
-                  <span className="text-[10px] text-slate-500">Commercial Office Owner</span>
-                </button>
-              </div>
-            </div>
-          </div>
+            <div className="p-5 bg-slate-50 border-t border-slate-100">
+              <p className="text-[10px] font-semibold text-slate-500">
+                Use your own Supabase account. Demo credentials are not bundled with the production database.
+              </p>
+            </div>          </div>
         </div>
       )}
 

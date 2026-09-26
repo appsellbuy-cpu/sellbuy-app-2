@@ -389,7 +389,7 @@ export const PostPropertyModal: React.FC<PostPropertyModalProps> = ({ isOpen, on
         postedBy: ownerRole,
         ownerName,
         ownerPhone,
-        ownerId: user?.id || 'user-default',
+        ownerId: user?.id,
         status: 'active'
       });
 

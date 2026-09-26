@@ -100,23 +100,13 @@ const PropertyContext = createContext<PropertyContextType | undefined>(undefined
 export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, token } = useAuth();
   const [properties, setProperties] = useState<Property[]>(() => {
+    if (isSupabaseConfigured()) return [];
     const saved = localStorage.getItem('navikx_properties');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // If cached properties don't have rental properties, merge initial ones
-          const hasRentals = parsed.some((p: Property) => p.listingType === 'rent');
-          if (!hasRentals) {
-            const merged = [...parsed, ...INITIAL_PROPERTIES.filter(p => p.listingType === 'rent')];
-            localStorage.setItem('navikx_properties', JSON.stringify(merged));
-            return merged;
-          }
-          return parsed;
-        }
-      } catch {
-        return INITIAL_PROPERTIES;
-      }
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
     }
     return INITIAL_PROPERTIES;
   });
@@ -341,7 +331,8 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       }
     } catch (err) {
-      console.warn('Failed to load properties, keeping cached properties', err);
+      console.warn('Failed to load properties from Supabase/API', err);
+      if (isSupabaseConfigured()) setProperties([]);
     } finally {
       setLoading(false);
     }
