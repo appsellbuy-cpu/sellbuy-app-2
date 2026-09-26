@@ -3,6 +3,8 @@ import { useAuth } from '../context/AuthContext';
 import { useProperties } from '../context/PropertyContext';
 import { Property, ViewingBooking, AgentInquiry, SavedListing } from '../types';
 import { api } from '../services/api';
+import { formatIndianCurrency, formatRentPrice } from '../utils/formatters';
+import { fetchInquiriesFromSupabase, subscribeToInquiriesRealtime } from '../lib/supabase';
 import { Building2, Plus, Edit2, Trash2, Calendar, Clock, MapPin, Eye, Shield, CheckCircle, AlertCircle, MessageSquare, Send, Heart, Bed, Bath, Square } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -32,9 +34,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onBackToHome }) =>
   useEffect(() => {
     const loadInquiries = async () => {
       try {
+        const supaInquiries = await fetchInquiriesFromSupabase(user?.id, user?.email, user?.role);
+        if (supaInquiries && supaInquiries.length > 0) {
+          setInquiries(supaInquiries as any);
+          return;
+        }
         const list = await api.getAgentInquiries();
         const safeList = Array.isArray(list) ? list : [];
-        // If regular user, filter by their email; if agent or admin, show their inquiries or all
         if (user?.role === 'agent' || user?.role === 'admin') {
           setInquiries(safeList);
         } else if (user?.email) {
@@ -48,6 +54,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onBackToHome }) =>
       }
     };
     loadInquiries();
+
+    const sub = subscribeToInquiriesRealtime((newInquiry) => {
+      if (user?.role === 'admin' || user?.role === 'agent' || newInquiry.senderEmail === user?.email) {
+        setInquiries(prev => {
+          if (prev.some(i => i.id === newInquiry.id)) return prev;
+          return [newInquiry as any, ...prev];
+        });
+      }
+    });
+
+    return () => {
+      sub.unsubscribe();
+    };
   }, [user]);
 
   if (!isAuthenticated) {
@@ -70,14 +89,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onBackToHome }) =>
     );
   }
 
-  // Filter listings by current user or show all if agent
-  const myListings = (properties || []).filter(
-    p => p.ownerId === user?.id || user?.role === 'agent' || !p.ownerId
-  );
+  // Filter listings by current user (strictly owned by logged-in user or all if admin)
+  const myListings = (properties || []).filter(p => {
+    if (!user) return false;
+    if (user.role === 'admin') return true;
+    return p.ownerId === user.id || (user.email && (p as any).ownerEmail === user.email);
+  });
 
   const handleDelete = async (id: string) => {
+    const target = properties.find(p => p.id === id);
+    if (target && user && user.role !== 'admin' && target.ownerId && target.ownerId !== user.id) {
+      alert('You can only delete properties that belong to your account.');
+      return;
+    }
     await deleteProperty(id);
     setDeleteConfirmId(null);
+  };
+
+  const handleEdit = (prop: Property) => {
+    if (user && user.role !== 'admin' && prop.ownerId && prop.ownerId !== user.id) {
+      alert('You can only edit properties that belong to your account.');
+      return;
+    }
+    openEditModal(prop);
   };
 
   return (
@@ -249,7 +283,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onBackToHome }) =>
                       <div className="p-5">
                         <div className="flex items-baseline justify-between mb-1">
                           <h3 className="text-base font-serif font-bold text-[#0A192F] truncate">{prop.title}</h3>
-                          <span className="text-base font-bold font-sans text-[#0A192F]">${prop.price.toLocaleString()}</span>
+                          <span className="text-base font-bold font-sans text-amber-800">
+                            {prop.priceDisplay || (prop.listingType === 'rent' ? formatRentPrice(prop.price) : formatIndianCurrency(prop.price))}
+                          </span>
                         </div>
                         <p className="text-xs text-gray-500 flex items-center gap-1">
                           <MapPin className="w-3.5 h-3.5 text-gray-400" /> {prop.location}
@@ -264,15 +300,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onBackToHome }) =>
                     <div className="p-4 bg-[#FAF9F7] border-t border-gray-100 flex items-center justify-between">
                       <button
                         onClick={() => openDetail(prop)}
-                        className="text-xs font-semibold text-gray-600 hover:text-[#0A192F] flex items-center gap-1"
+                        className="text-xs font-semibold text-gray-600 hover:text-[#0A192F] flex items-center gap-1 cursor-pointer"
                       >
                         <Eye className="w-3.5 h-3.5" /> View
                       </button>
 
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => openEditModal(prop)}
-                          className="p-2 text-gray-600 hover:text-[#0A192F] hover:bg-white rounded-lg transition-colors border border-transparent hover:border-gray-200"
+                          onClick={() => handleEdit(prop)}
+                          className="p-2 text-gray-600 hover:text-[#0A192F] hover:bg-white rounded-lg transition-colors border border-transparent hover:border-gray-200 cursor-pointer"
                           title="Edit Property"
                         >
                           <Edit2 className="w-4 h-4 text-[#C5A059]" />

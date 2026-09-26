@@ -7,9 +7,10 @@ import { useAuth } from '../context/AuthContext';
 interface ScheduleTourModalProps {
   property: Property | null;
   onClose: () => void;
+  onNavigateToBookings?: () => void;
 }
 
-export const ScheduleTourModal: React.FC<ScheduleTourModalProps> = ({ property, onClose }) => {
+export const ScheduleTourModal: React.FC<ScheduleTourModalProps> = ({ property, onClose, onNavigateToBookings }) => {
   const { addBooking, showToast } = useProperties();
   const { user } = useAuth();
 
@@ -20,11 +21,12 @@ export const ScheduleTourModal: React.FC<ScheduleTourModalProps> = ({ property, 
   });
   const [time, setTime] = useState('11:00 AM');
   const [tourType, setTourType] = useState<'in_person' | 'video_call'>('in_person');
-  const [name, setName] = useState(user?.name || 'Alexander Wright');
-  const [email, setEmail] = useState(user?.email || 'appsellbuy@gmail.com');
-  const [phone, setPhone] = useState(user?.phone || '+91 98201 45678');
+  const [name, setName] = useState(user?.name || '');
+  const [email, setEmail] = useState(user?.email || '');
+  const [phone, setPhone] = useState(user?.phone || '');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isBookedSuccess, setIsBookedSuccess] = useState(false);
 
   if (!property) return null;
 
@@ -53,7 +55,7 @@ export const ScheduleTourModal: React.FC<ScheduleTourModalProps> = ({ property, 
         propertyImage: property.image,
         preferredDate: date,
         preferredTime: time,
-        tourType,
+        tourType: tourType === 'in_person' ? 'In-Person Visit' : 'Live Video Tour',
         userName: name,
         userEmail: email,
         userPhone: phone,
@@ -61,7 +63,7 @@ export const ScheduleTourModal: React.FC<ScheduleTourModalProps> = ({ property, 
         status: 'confirmed'
       });
 
-      onClose();
+      setIsBookedSuccess(true);
     } catch (err: any) {
       showToast(err.message || 'Failed to schedule viewing tour.');
     } finally {
@@ -110,8 +112,32 @@ export const ScheduleTourModal: React.FC<ScheduleTourModalProps> = ({ property, 
           </div>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs sm:text-sm">
+        {isBookedSuccess ? (
+          <div className="p-8 text-center space-y-5 animate-in fade-in">
+            <div className="w-16 h-16 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center mx-auto text-emerald-600 shadow-sm">
+              <CheckCircle2 className="w-10 h-10" />
+            </div>
+            <div>
+              <h4 className="text-xl font-bold font-serif text-slate-900">Visit Scheduled Successfully!</h4>
+              <p className="text-xs text-slate-600 mt-2 max-w-md mx-auto leading-relaxed">
+                Your <span className="font-bold text-slate-900">{tourType === 'in_person' ? 'In-Person' : 'Live Video'}</span> tour for <span className="font-bold text-amber-700">{property.title}</span> has been booked for <span className="font-bold text-slate-900">{date}</span> at <span className="font-bold text-slate-900">{time}</span>. Our relationship manager will meet you at the property.
+              </p>
+            </div>
+            <div className="pt-2">
+              <button
+                onClick={() => {
+                  onClose();
+                  if (onNavigateToBookings) onNavigateToBookings();
+                }}
+                className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition shadow-md"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* Form */
+          <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs sm:text-sm">
           {/* Tour Type */}
           <div>
             <label className="font-bold text-slate-700 block mb-1.5">Select Tour Mode</label>
@@ -232,6 +258,7 @@ export const ScheduleTourModal: React.FC<ScheduleTourModalProps> = ({ property, 
             </p>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

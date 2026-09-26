@@ -6,6 +6,76 @@
 -- Enable UUID Extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- ==============================================================================
+-- 0. SCHEMA TYPE MISMATCH MIGRATION SAFEGUARD
+-- Safely converts pre-existing UUID columns to TEXT to prevent:
+-- "ERROR: operator does not exist: text = uuid"
+-- ==============================================================================
+DO $$
+BEGIN
+  -- Safe conversion for properties
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='properties' AND column_name='id' AND data_type='uuid') THEN
+    ALTER TABLE public.properties ALTER COLUMN id TYPE text USING id::text;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='properties' AND column_name='owner_id' AND data_type='uuid') THEN
+    ALTER TABLE public.properties ALTER COLUMN owner_id TYPE text USING owner_id::text;
+  END IF;
+
+  -- Safe conversion for saved_properties
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='saved_properties' AND column_name='id' AND data_type='uuid') THEN
+    ALTER TABLE public.saved_properties ALTER COLUMN id TYPE text USING id::text;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='saved_properties' AND column_name='user_id' AND data_type='uuid') THEN
+    ALTER TABLE public.saved_properties ALTER COLUMN user_id TYPE text USING user_id::text;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='saved_properties' AND column_name='property_id' AND data_type='uuid') THEN
+    ALTER TABLE public.saved_properties ALTER COLUMN property_id TYPE text USING property_id::text;
+  END IF;
+
+  -- Safe conversion for activity_history
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='activity_history' AND column_name='id' AND data_type='uuid') THEN
+    ALTER TABLE public.activity_history ALTER COLUMN id TYPE text USING id::text;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='activity_history' AND column_name='user_id' AND data_type='uuid') THEN
+    ALTER TABLE public.activity_history ALTER COLUMN user_id TYPE text USING user_id::text;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='activity_history' AND column_name='property_id' AND data_type='uuid') THEN
+    ALTER TABLE public.activity_history ALTER COLUMN property_id TYPE text USING property_id::text;
+  END IF;
+
+  -- Safe conversion for inquiries
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='inquiries' AND column_name='id' AND data_type='uuid') THEN
+    ALTER TABLE public.inquiries ALTER COLUMN id TYPE text USING id::text;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='inquiries' AND column_name='property_id' AND data_type='uuid') THEN
+    ALTER TABLE public.inquiries ALTER COLUMN property_id TYPE text USING property_id::text;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='inquiries' AND column_name='owner_id' AND data_type='uuid') THEN
+    ALTER TABLE public.inquiries ALTER COLUMN owner_id TYPE text USING owner_id::text;
+  END IF;
+
+  -- Safe conversion for bookings
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='bookings' AND column_name='id' AND data_type='uuid') THEN
+    ALTER TABLE public.bookings ALTER COLUMN id TYPE text USING id::text;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='bookings' AND column_name='property_id' AND data_type='uuid') THEN
+    ALTER TABLE public.bookings ALTER COLUMN property_id TYPE text USING property_id::text;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='bookings' AND column_name='user_id' AND data_type='uuid') THEN
+    ALTER TABLE public.bookings ALTER COLUMN user_id TYPE text USING user_id::text;
+  END IF;
+
+  -- Safe conversion for valuations
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='valuations' AND column_name='id' AND data_type='uuid') THEN
+    ALTER TABLE public.valuations ALTER COLUMN id TYPE text USING id::text;
+  END IF;
+
+  -- Safe conversion for profiles
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='id' AND data_type='uuid') THEN
+    ALTER TABLE public.profiles ALTER COLUMN id TYPE text USING id::text;
+  END IF;
+END $$;
+
 -- ==========================================
 -- 1. PROPERTIES TABLE
 -- ==========================================
@@ -33,6 +103,14 @@ CREATE TABLE IF NOT EXISTS public.properties (
     rera_approved BOOLEAN DEFAULT true,
     rera_id TEXT,
     possession_status TEXT DEFAULT 'Ready to Move',
+    facing TEXT DEFAULT 'North-East',
+    floor TEXT DEFAULT '5th of 14 Floors',
+    parking TEXT DEFAULT '1 Covered Parking',
+    age_of_property TEXT DEFAULT '0-2 Years',
+    deposit NUMERIC,
+    lease_duration TEXT DEFAULT '11 Months',
+    pet_friendly BOOLEAN DEFAULT true,
+    preferred_tenant TEXT DEFAULT 'Any',
     owner_id TEXT,
     owner_name TEXT,
     owner_phone TEXT,
@@ -149,7 +227,7 @@ CREATE TABLE IF NOT EXISTS public.valuations (
 -- 7. USER PROFILES & EXTENDED METADATA
 -- ==========================================
 CREATE TABLE IF NOT EXISTS public.profiles (
-    id TEXT PRIMARY KEY, -- maps to auth.users.id
+    id TEXT PRIMARY KEY, -- maps to auth.users.id or text ID
     name TEXT,
     email TEXT,
     role TEXT DEFAULT 'user', -- 'user', 'seller', 'agent', 'admin'
@@ -170,17 +248,26 @@ VALUES ('property-photos', 'property-photos', true)
 ON CONFLICT (id) DO NOTHING;
 
 -- Public Storage Policy for Property Photos
-CREATE POLICY "Public read on property-photos"
-ON storage.objects FOR SELECT
-USING (bucket_id = 'property-photos');
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public read on property-photos' AND tablename = 'objects') THEN
+    CREATE POLICY "Public read on property-photos"
+    ON storage.objects FOR SELECT
+    USING (bucket_id = 'property-photos');
+  END IF;
 
-CREATE POLICY "Public insert on property-photos"
-ON storage.objects FOR INSERT
-WITH CHECK (bucket_id = 'property-photos');
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public insert on property-photos' AND tablename = 'objects') THEN
+    CREATE POLICY "Public insert on property-photos"
+    ON storage.objects FOR INSERT
+    WITH CHECK (bucket_id = 'property-photos');
+  END IF;
 
-CREATE POLICY "Public update on property-photos"
-ON storage.objects FOR UPDATE
-USING (bucket_id = 'property-photos');
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public update on property-photos' AND tablename = 'objects') THEN
+    CREATE POLICY "Public update on property-photos"
+    ON storage.objects FOR UPDATE
+    USING (bucket_id = 'property-photos');
+  END IF;
+END $$;
 
 -- ==========================================
 -- 9. ROW LEVEL SECURITY (RLS) POLICIES
@@ -194,21 +281,67 @@ ALTER TABLE public.valuations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 -- Allow read & write access for seamless operations
-CREATE POLICY "Allow public select on properties" ON public.properties FOR SELECT USING (true);
-CREATE POLICY "Allow all on properties" ON public.properties FOR ALL USING (true);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public select on properties' AND tablename = 'properties') THEN
+    CREATE POLICY "Allow public select on properties" ON public.properties FOR SELECT USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow all on properties' AND tablename = 'properties') THEN
+    CREATE POLICY "Allow all on properties" ON public.properties FOR ALL USING (true);
+  END IF;
 
-CREATE POLICY "Allow all on saved_properties" ON public.saved_properties FOR ALL USING (true);
-CREATE POLICY "Allow all on activity_history" ON public.activity_history FOR ALL USING (true);
-CREATE POLICY "Allow all on inquiries" ON public.inquiries FOR ALL USING (true);
-CREATE POLICY "Allow all on bookings" ON public.bookings FOR ALL USING (true);
-CREATE POLICY "Allow all on valuations" ON public.valuations FOR ALL USING (true);
-CREATE POLICY "Allow all on profiles" ON public.profiles FOR ALL USING (true);
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow all on saved_properties' AND tablename = 'saved_properties') THEN
+    CREATE POLICY "Allow all on saved_properties" ON public.saved_properties FOR ALL USING (true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow all on activity_history' AND tablename = 'activity_history') THEN
+    CREATE POLICY "Allow all on activity_history" ON public.activity_history FOR ALL USING (true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow all on inquiries' AND tablename = 'inquiries') THEN
+    CREATE POLICY "Allow all on inquiries" ON public.inquiries FOR ALL USING (true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow all on bookings' AND tablename = 'bookings') THEN
+    CREATE POLICY "Allow all on bookings" ON public.bookings FOR ALL USING (true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow all on valuations' AND tablename = 'valuations') THEN
+    CREATE POLICY "Allow all on valuations" ON public.valuations FOR ALL USING (true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow all on profiles' AND tablename = 'profiles') THEN
+    CREATE POLICY "Allow all on profiles" ON public.profiles FOR ALL USING (true);
+  END IF;
+END $$;
 
 -- ==========================================
 -- 10. ENABLE REALTIME SYNC ON CRITICAL TABLES
 -- ==========================================
-ALTER PUBLICATION supabase_realtime ADD TABLE public.properties;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.saved_properties;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.activity_history;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.inquiries;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.bookings;
+DO $$
+BEGIN
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.properties;
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.saved_properties;
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.activity_history;
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.inquiries;
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.bookings;
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+END $$;
