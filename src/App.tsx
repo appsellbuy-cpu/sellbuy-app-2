@@ -634,20 +634,12 @@ export default function App() {
 
   // Properties State (with LocalStorage persistence and auto-merge for demo commercial/industrial properties)
   const [properties, setProperties] = useState<Property[]>(() => {
+    if (isSupabaseConfigured()) return [];
     try {
       const saved = localStorage.getItem('nestify_properties');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          const existingIds = new Set(parsed.map((p: any) => p.id));
-          const missing = DEMO_PROPERTIES.filter(p => !existingIds.has(p.id));
-          if (missing.length > 0) {
-            const merged = [...parsed, ...missing];
-            localStorage.setItem('nestify_properties', JSON.stringify(merged));
-            return merged;
-          }
-          return parsed;
-        }
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {}
     return DEMO_PROPERTIES;
@@ -784,6 +776,7 @@ export default function App() {
         }
       } catch (error) {
         console.error('Failed to load live Supabase properties:', error);
+        if (mounted) setProperties([]);
       }
     };
     void loadLiveProperties();
