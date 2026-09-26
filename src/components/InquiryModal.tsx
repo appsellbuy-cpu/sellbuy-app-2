@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Send, Phone, Mail, CheckCircle2, ShieldCheck, MessageSquare, MapPin } from 'lucide-react';
 import { Property } from '../types';
-import { api } from '../services/api';
+import { submitPropertyInquiryToSupabase } from '../lib/supabase';
 import { useProperties } from '../context/PropertyContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -39,13 +39,22 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({ property, onClose })
 
     setIsSubmitting(true);
     try {
-      await api.submitInquiry({
+      await submitPropertyInquiryToSupabase({
+        id: 'inq-' + Date.now(),
         propertyId: property.id,
-        senderName: name,
-        senderEmail: email,
-        senderPhone: phone,
-        message,
-        inquiryType
+        propertyTitle: property.title,
+        propertyLocation: property.location,
+        propertyImage: property.image,
+        propertyPrice: property.price,
+        ownerId: property.ownerId,
+        ownerName: property.ownerName,
+        senderName: name.trim(),
+        senderEmail: email.trim().toLowerCase(),
+        senderPhone: phone.trim(),
+        message: message.trim(),
+        inquiryType,
+        status: 'new',
+        createdAt: new Date().toISOString()
       });
 
       showToast(`Enquiry sent directly to ${property.ownerName || 'the property owner'}!`);

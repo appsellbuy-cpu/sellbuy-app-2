@@ -133,8 +133,7 @@ export const fetchPropertiesFromSupabase = async (): Promise<Property[]> => {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.warn('Supabase fetch error, fallback to initial properties:', error.message);
-      return INITIAL_PROPERTIES;
+      throw error;
     }
 
     if (data && data.length > 0) {
@@ -143,10 +142,10 @@ export const fetchPropertiesFromSupabase = async (): Promise<Property[]> => {
       return properties;
     }
 
-    return INITIAL_PROPERTIES;
+    return [];
   } catch (err) {
     console.error('Failed to fetch from Supabase:', err);
-    return INITIAL_PROPERTIES;
+    throw err;
   }
 };
 
@@ -199,18 +198,16 @@ export const savePropertyToSupabase = async (property: Partial<Property>, user?:
         .select()
         .single();
 
-      if (error) {
-        console.warn('Supabase upsert property error:', error.message);
-      } else if (data) {
-        return mapSupabaseRowToProperty(data);
-      }
+      if (error) throw error;
+      if (data) return mapSupabaseRowToProperty(data);
+      throw new Error('Supabase did not return the saved property.');
     } catch (err) {
       console.error('Error saving property to Supabase:', err);
+      throw err;
     }
   }
 
-  const savedProp: Property = mapSupabaseRowToProperty(formattedRow);
-  return savedProp;
+  return mapSupabaseRowToProperty(formattedRow);
 };
 
 export const deletePropertyFromSupabase = async (propertyId: string): Promise<boolean> => {
@@ -220,9 +217,11 @@ export const deletePropertyFromSupabase = async (propertyId: string): Promise<bo
         .from('properties')
         .delete()
         .eq('id', propertyId);
-      if (!error) return true;
+      if (error) throw error;
+      return true;
     } catch (err) {
-      console.warn('Supabase delete error:', err);
+      console.error('Supabase delete error:', err);
+      throw err;
     }
   }
   return true;
@@ -233,64 +232,30 @@ export const seedInitialPropertiesToSupabase = async (): Promise<{ count: number
   if (!isSupabaseConfigured()) {
     return {
       count: INITIAL_PROPERTIES.length,
-      success: true,
-      message: 'Demo dataset cached locally. Connect Supabase credentials in .env to write directly to PostgreSQL.'
-    };
-  }
-
-  try {
-    const formattedRows = INITIAL_PROPERTIES.map(p => ({
-      id: p.id,
-      title: p.title,
-      location: p.location,
-      locality: p.locality || p.location,
-      city: p.city,
-      price: Number(p.price),
-      price_display: p.priceDisplay,
-      category: (p.category || 'office').toLowerCase(),
-      listing_type: p.listingType || 'rent',
-      beds: Number(p.beds) || 0,
-      baths: Number(p.baths) || 1,
-      sqft: Number(p.sqft) || 1200,
-      carpet_area: Number(p.carpetArea || p.sqft) || 1000,
-      furnishing: p.furnishing || 'Fully Furnished',
-      image: p.image,
-      gallery: p.gallery || [p.image],
-      description: p.description,
-      featured: Boolean(p.featured),
-      verified: Boolean(p.verified),
-      zero_brokerage: Boolean(p.zeroBrokerage),
-      rera_approved: Boolean(p.reraApproved),
-      rera_id: p.reraId || 'RERA-SUPA-SEED',
-      possession_status: p.possessionStatus || 'Ready to Move',
-      owner_id: p.ownerId || null,
-      owner_name: p.ownerName || 'Verified Agent',
-      owner_phone: p.ownerPhone || '+91 98201 45678',
-      status: 'active',
-      amenities: p.amenities || ['Power Backup', 'Security', 'Elevator'],
-      coordinates: p.coordinates || { lat: 19.076, lng: 72.8777 }
-    }));
-
-    const { error } = await supabase
-      .from('properties')
-      .upsert(formattedRows, { onConflict: 'id' });
-
-    if (error) {
-      throw error;
-    }
-
-    return {
-      count: formattedRows.length,
-      success: true,
-      message: `Successfully seeded ${formattedRows.length} premium properties into Supabase PostgreSQL database!`
-    };
-  } catch (err: any) {
-    return {
-      count: 0,
       success: false,
-      message: err?.message || 'Failed to seed database.'
+      message: 'Supabase is not configured in this environment.'
     };
   }
+
+  const { count, error } = await supabase
+    .from('properties')
+    .select('id', { count: 'exact', head: true });
+
+  if (error) throw error;
+
+  if ((count || 0) > 0) {
+    return {
+      count: count || 0,
+      success: true,
+      message: 'Supabase already contains ' + (count || 0) + ' properties. No demo overwrite was performed.'
+    };
+  }
+
+  return {
+    count: 0,
+    success: false,
+    message: 'Browser-side bulk seeding is disabled because property ownership must come from real Supabase Auth users. Use a controlled database seed/migration instead.'
+  };
 };
 
 // ==========================================
@@ -328,7 +293,8 @@ export const uploadPropertyPhotoToSupabase = async (
           upsert: true
         });
 
-      if (!error && data) {
+      if (error) throw error;
+      if (data) {
         const { data: publicData } = supabase.storage
           .from('property-photos')
           .getPublicUrl(fileName);
@@ -339,10 +305,11 @@ export const uploadPropertyPhotoToSupabase = async (
       }
     }
   } catch (err) {
-    console.warn('Supabase storage upload fallback to direct image URL:', err);
+    console.error('Supabase storage upload failed:', err);
+    throw err;
   }
 
-  return { url: imageDataUrl, success: true, source: 'cloud_direct' };
+  throw new Error('Supabase Storage upload failed.');
 };
 
 // ==========================================
@@ -360,17 +327,17 @@ export const fetchUserSavedListings = async (userId: string): Promise<SavedListi
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
-      if (!error && data) {
-        return data.map(item => ({
-          id: item.id,
-          userId: item.user_id,
-          propertyId: item.property_id,
-          property: typeof item.property_data === 'string' ? JSON.parse(item.property_data) : item.property_data,
-          createdAt: item.created_at
-        }));
-      }
+      if (error) throw error;
+      return (data || []).map(item => ({
+        id: item.id,
+        userId: item.user_id,
+        propertyId: item.property_id,
+        property: typeof item.property_data === 'string' ? JSON.parse(item.property_data) : item.property_data,
+        createdAt: item.created_at
+      }));
     } catch (err) {
-      console.warn('Failed to fetch saved listings from Supabase:', err);
+      console.error('Failed to fetch saved listings from Supabase:', err);
+      throw err;
     }
   }
 
@@ -392,10 +359,11 @@ export const toggleUserSavedListing = async (
   if (exists) {
     const updated = currentSaved.filter(s => s.propertyId !== property.id);
     if (isSupabaseConfigured()) {
-      await supabase
+      const { error } = await supabase
         .from('saved_properties')
         .delete()
         .match({ user_id: userId, property_id: property.id });
+      if (error) throw error;
     }
     localStorage.setItem(`navikx_saved_listings_${userId}`, JSON.stringify(updated));
     recordUserActivity(userId, 'remove_saved', `Removed "${property.title}" from saved list`, property);
@@ -411,7 +379,7 @@ export const toggleUserSavedListing = async (
     const updated = [newEntry, ...currentSaved];
 
     if (isSupabaseConfigured()) {
-      await supabase
+      const { error } = await supabase
         .from('saved_properties')
         .insert({
           id: newEntry.id,
@@ -420,6 +388,7 @@ export const toggleUserSavedListing = async (
           property_data: property,
           created_at: newEntry.createdAt
         });
+      if (error) throw error;
     }
     localStorage.setItem(`navikx_saved_listings_${userId}`, JSON.stringify(updated));
     recordUserActivity(userId, 'save_property', `Saved "${property.title}" to favorites`, property);
@@ -553,9 +522,11 @@ export const submitPropertyInquiryToSupabase = async (inquiry: PropertyInquiry):
           status: inquiry.status,
           created_at: inquiry.createdAt
         });
-      if (!error) return true;
+      if (error) throw error;
+      return true;
     } catch (err) {
-      console.warn('Supabase inquiry insert error:', err);
+      console.error('Supabase inquiry insert error:', err);
+      throw err;
     }
   }
   return true;
@@ -590,9 +561,11 @@ export const createViewingBookingInSupabase = async (booking: ViewingBooking): P
           status: booking.status,
           created_at: booking.createdAt
         });
-      if (!error) return true;
+      if (error) throw error;
+      return true;
     } catch (err) {
-      console.warn('Supabase booking insert error:', err);
+      console.error('Supabase booking insert error:', err);
+      throw err;
     }
   }
   return true;
@@ -691,9 +664,11 @@ export const submitValuationToSupabase = async (val: ValuationRequest): Promise<
           estimated_rent: val.estimatedRent,
           created_at: val.createdAt
         });
-      if (!error) return true;
+      if (error) throw error;
+      return true;
     } catch (err) {
-      console.warn('Supabase valuation insert error:', err);
+      console.error('Supabase valuation insert error:', err);
+      throw err;
     }
   }
   return true;

@@ -92,21 +92,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
     hydrate();
-    const { data } = supabaseAuth.onAuthStateChange(async (event, session) => {
+    const { data } = supabaseAuth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT' || !session?.user) {
         setUser(null);
         setToken(null);
         return;
       }
-      try {
-        const profile = await fetchCurrentUserProfile();
-        if (mounted) {
-          setUser(profile);
-          setToken(session.access_token);
+      if (!session?.user) return;
+      setToken(session.access_token);
+      void Promise.resolve().then(async () => {
+        try {
+          const profile = await fetchCurrentUserProfile();
+          if (mounted) setUser(profile);
+        } catch (error) {
+          console.error('Failed to load Supabase profile:', error);
         }
-      } catch (error) {
-        console.error('Failed to load Supabase profile:', error);
-      }
+      });
     });
     return () => {
       mounted = false;
