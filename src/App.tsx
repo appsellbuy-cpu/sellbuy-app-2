@@ -71,6 +71,7 @@ import {
   uploadPropertyPhotoToSupabase,
   fetchPropertiesFromSupabase,
   subscribeToPropertiesRealtime,
+  createViewingBookingRecord,
   UserActivityRecord 
 } from './lib/supabase';
 
@@ -4336,14 +4337,41 @@ export default function App() {
               </div>
             ) : (
               <form 
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
-                  if (!visitForm.name || !visitForm.phone || !visitForm.date) {
+                  if (!visitForm.name || !visitForm.phone || !visitForm.date || !visitProperty) {
                     showToast('Please fill in all required fields.');
                     return;
                   }
-                  setVisitSubmitted(true);
-                  showToast('Property visit scheduled successfully!');
+
+                  try {
+                    if (isSupabaseActive) {
+                      await createViewingBookingRecord({
+                        id: 'book-' + Date.now(),
+                        propertyId: visitProperty.id,
+                        propertyTitle: visitProperty.title,
+                        propertyLocation: visitProperty.location,
+                        propertyCity: visitProperty.city,
+                        propertyImage: visitProperty.image,
+                        propertyPrice: visitProperty.price,
+                        propertyListingType: visitProperty.purpose,
+                        userId: user?.id,
+                        userName: visitForm.name.trim(),
+                        userEmail: user?.email || 'guest@nestify.com',
+                        userPhone: visitForm.phone.trim(),
+                        preferredDate: visitForm.date,
+                        preferredTime: visitForm.time,
+                        tourType: visitForm.type === 'video' ? 'Live Video Tour' : 'In-Person Visit',
+                        notes: 'Booked from main property comparison/tour flow.',
+                        status: 'confirmed',
+                        createdAt: new Date().toISOString()
+                      });
+                    }
+                    setVisitSubmitted(true);
+                    showToast('Property visit scheduled successfully!');
+                  } catch (err: any) {
+                    showToast(err?.message || 'Failed to schedule property visit.');
+                  }
                 }}
                 className="p-6 space-y-4"
               >
