@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Calculator, Sparkles, MapPin, Building2, CheckCircle2, TrendingUp, ShieldCheck, IndianRupee } from 'lucide-react';
 import { INDIAN_CITIES } from '../utils/formatters';
 import { useProperties } from '../context/PropertyContext';
+import { useAuth } from '../context/AuthContext';
 
 interface PropertyValuationModalProps {
   isOpen: boolean;
@@ -10,6 +11,7 @@ interface PropertyValuationModalProps {
 
 export const PropertyValuationModal: React.FC<PropertyValuationModalProps> = ({ isOpen, onClose }) => {
   const { showToast, submitValuation } = useProperties();
+  const { user } = useAuth();
 
   const [city, setCity] = useState('Mumbai');
   const [locality, setLocality] = useState('Bandra West');
@@ -19,6 +21,13 @@ export const PropertyValuationModal: React.FC<PropertyValuationModalProps> = ({ 
   const [furnishing, setFurnishing] = useState('Semi-Furnished');
   const [userName, setUserName] = useState('');
   const [userPhone, setUserPhone] = useState('');
+
+  React.useEffect(() => {
+    if (user) {
+      setUserName(user.name || '');
+      setUserPhone(user.phone || '');
+    }
+  }, [user]);
   const [isCalculating, setIsCalculating] = useState(false);
   const [valuationResult, setValuationResult] = useState<{
     estimate: string;
@@ -38,9 +47,11 @@ export const PropertyValuationModal: React.FC<PropertyValuationModalProps> = ({ 
         location: city,
         locality,
         propertyType,
-        name: userName || 'Valued User',
-        phone: userPhone,
-        propertySize: size
+        name: userName || user?.name || 'Valued User',
+        phone: userPhone || user?.phone || '',
+        propertySize: size,
+        bhk,
+        furnishing
       });
 
       const sqft = Number(size) || 1000;
@@ -59,21 +70,8 @@ export const PropertyValuationModal: React.FC<PropertyValuationModalProps> = ({ 
       });
 
       showToast('Valuation report generated successfully!');
-    } catch {
-      // Local calculation fallback
-      const sqft = Number(size) || 1000;
-      let baseRate = 9500;
-      if (city === 'Mumbai') baseRate = 24000;
-      else if (city === 'Gurgaon') baseRate = 13500;
-      else if (city === 'Bangalore') baseRate = 10500;
-
-      setValuationResult({
-        estimate: `₹${((sqft * baseRate) / 100000).toFixed(1)} Lakh`,
-        estimateRent: `₹${Math.round((sqft * baseRate * 0.0035) / 500) * 500}/month`,
-        ratePerSqFt: `₹${baseRate.toLocaleString('en-IN')}/sq.ft`,
-        appreciation: '+8.4% YoY'
-      });
-      showToast('Valuation report generated successfully!');
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to save valuation to Supabase.');
     } finally {
       setIsCalculating(false);
     }
