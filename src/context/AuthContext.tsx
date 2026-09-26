@@ -139,19 +139,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       if (isSupabaseActive) {
         const res = await supabaseAuth.signInWithPassword(email, password);
-        if (res?.user) {
-          const supaUser: User = {
-            id: res.user.id,
-            name: res.user.user_metadata?.name || email.split('@')[0],
-            email: res.user.email || email,
-            role: res.user.user_metadata?.role || 'user',
-            phone: res.user.user_metadata?.phone || '+91 98201 45678',
-            city: res.user.user_metadata?.city || 'Mumbai',
-            avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=400&auto=format&fit=crop'
-          };
+        if (res?.user && res?.session) {
+          const supaUser = await fetchCurrentUserProfile();
+          if (!supaUser) throw new Error('Supabase profile was not created for this account.');
           setUser(supaUser);
-          setToken(res.session?.access_token || `token-${supaUser.id}`);
-          await recordUserActivity(supaUser.id, 'login', `Signed in successfully as ${supaUser.email}`);
+          setToken(res.session.access_token);
+          await recordUserActivity(supaUser.id, 'login', 'Signed in successfully as ' + supaUser.email);
         }
       } else {
         const res = await api.login(email, password);
@@ -171,19 +164,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       if (isSupabaseActive) {
         const res = await supabaseAuth.signUp(email, password, { name, role, phone, city });
-        if (res?.user) {
-          const supaUser: User = {
-            id: res.user.id,
-            name: name || email.split('@')[0],
-            email,
-            role: (role as any) || 'user',
-            phone: phone || '+91 98201 00000',
-            city: city || 'Mumbai',
-            avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=400&auto=format&fit=crop'
-          };
+        if (res?.user && res?.session) {
+          const supaUser = await fetchCurrentUserProfile();
+          if (!supaUser) throw new Error('Supabase profile was not created for this account.');
           setUser(supaUser);
-          setToken(res.session?.access_token || `token-${supaUser.id}`);
-          await recordUserActivity(supaUser.id, 'login', `Registered new account as ${supaUser.name}`);
+          setToken(res.session.access_token);
+          await recordUserActivity(supaUser.id, 'login', 'Registered new account as ' + supaUser.name);
         }
       } else {
         const res = await api.register({ name, email, password, role, phone, city });
@@ -219,6 +205,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const switchDemoRole = (role: 'user' | 'agent' | 'admin' | 'seller') => {
+    if (isSupabaseActive) {
+      console.warn('Demo role switching is disabled while Supabase authentication is active.');
+      return;
+    }
     let targetUser: User;
     if (role === 'admin') {
       targetUser = {
@@ -285,6 +275,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updatePassword = async (currentPass: string, newPass: string): Promise<boolean> => {
     if (!currentPass || !newPass) {
       throw new Error('Passwords cannot be empty');
+    }
+    if (isSupabaseActive) {
+      const { error } = await (await import('../lib/supabase')).supabase.auth.updateUser({ password: newPass });
+      if (error) throw error;
+      return true;
     }
     await new Promise(resolve => setTimeout(resolve, 800));
     return true;
