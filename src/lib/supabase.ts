@@ -151,6 +151,9 @@ export const fetchPropertiesFromSupabase = async (): Promise<Property[]> => {
 };
 
 export const savePropertyToSupabase = async (property: Partial<Property>, user?: User | null): Promise<Property> => {
+  if (isSupabaseConfigured() && !user?.id) {
+    throw new Error('You must be signed in to create or update a property.');
+  }
   const propertyId = property.id || `prop-supa-${Date.now()}`;
   const now = new Date().toISOString();
 
@@ -178,7 +181,7 @@ export const savePropertyToSupabase = async (property: Partial<Property>, user?:
     rera_approved: property.reraApproved ?? true,
     rera_id: property.reraId || 'RERA-SUPA-2026-99',
     possession_status: property.possessionStatus || (property as any).possession || 'Ready to Move',
-    owner_id: user?.id || property.ownerId || 'user-default',
+    owner_id: user?.id || property.ownerId,
     owner_name: user?.name || property.ownerName || 'Verified Host',
     owner_phone: user?.phone || property.ownerPhone || '+91 98201 45678',
     status: property.status || 'active',
@@ -260,7 +263,7 @@ export const seedInitialPropertiesToSupabase = async (): Promise<{ count: number
       rera_approved: Boolean(p.reraApproved),
       rera_id: p.reraId || 'RERA-SUPA-SEED',
       possession_status: p.possessionStatus || 'Ready to Move',
-      owner_id: p.ownerId || 'user-seller-1',
+      owner_id: p.ownerId || null,
       owner_name: p.ownerName || 'Verified Agent',
       owner_phone: p.ownerPhone || '+91 98201 45678',
       status: 'active',
@@ -541,6 +544,7 @@ export const submitPropertyInquiryToSupabase = async (inquiry: PropertyInquiry):
           property_price: inquiry.propertyPrice,
           owner_id: inquiry.ownerId,
           owner_name: inquiry.ownerName,
+          user_id: (await supabase.auth.getUser()).data.user?.id || null,
           user_name: inquiry.senderName,
           user_email: inquiry.senderEmail,
           user_phone: inquiry.senderPhone,
@@ -591,6 +595,75 @@ export const createViewingBookingInSupabase = async (booking: ViewingBooking): P
       console.warn('Supabase booking insert error:', err);
     }
   }
+  return true;
+};
+
+// ==========================================
+// 8. BOOKINGS QUERY / MUTATIONS
+// ==========================================
+
+export const fetchUserBookingsFromSupabase = async (userId: string): Promise<ViewingBooking[]> => {
+  if (!isSupabaseConfigured() || !userId) return [];
+  const { data, error } = await supabase
+    .from('bookings')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(row => ({
+    id: row.id,
+    propertyId: row.property_id,
+    propertyTitle: row.property_title,
+    propertyLocation: row.property_location,
+    propertyCity: row.property_city,
+    propertyImage: row.property_image,
+    propertyPrice: Number(row.property_price || 0),
+    propertyListingType: row.property_listing_type,
+    userId: row.user_id,
+    userName: row.user_name,
+    userEmail: row.user_email,
+    userPhone: row.user_phone,
+    preferredDate: row.preferred_date,
+    preferredTime: row.preferred_time,
+    tourType: row.tour_type,
+    notes: row.notes,
+    status: row.status,
+    createdAt: row.created_at
+  }));
+};
+
+export const createViewingBookingRecord = async (booking: ViewingBooking): Promise<ViewingBooking> => {
+  const { data, error } = await supabase.from('bookings').insert({
+    id: booking.id,
+    property_id: booking.propertyId,
+    property_title: booking.propertyTitle,
+    property_location: booking.propertyLocation,
+    property_city: booking.propertyCity || null,
+    property_image: booking.propertyImage,
+    property_price: booking.propertyPrice,
+    property_listing_type: booking.propertyListingType || null,
+    user_id: booking.userId || null,
+    user_name: booking.userName,
+    user_email: booking.userEmail,
+    user_phone: booking.userPhone,
+    preferred_date: booking.preferredDate,
+    preferred_time: booking.preferredTime,
+    tour_type: booking.tourType || 'In-Person Visit',
+    notes: booking.notes || '',
+    status: booking.status,
+    created_at: booking.createdAt
+  }).select().single();
+  if (error) throw error;
+  return {
+    ...booking,
+    id: data.id,
+    createdAt: data.created_at
+  };
+};
+
+export const cancelViewingBookingInSupabase = async (id: string): Promise<boolean> => {
+  const { error } = await supabase.from('bookings').delete().eq('id', id);
+  if (error) throw error;
   return true;
 };
 
@@ -690,6 +763,52 @@ export const getDatabaseStatistics = async (): Promise<DatabaseStats> => {
 };
 
 // ==========================================
+// 10. PROFILE HELPERS
+// ==========================================
+
+export const fetchCurrentUserProfile = async (): Promise<User | null> => {
+  const { data: authData } = await supabase.auth.getUser();
+  const authUser = authData.user;
+  if (!authUser) return null;
+  const { data, error } = await supabase.from('profiles').select('*').eq('id', authUser.id).single();
+  if (error) throw error;
+  return {
+    id: data.id,
+    name: data.name || authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'User',
+    email: data.email || authUser.email || '',
+    role: (data.role || 'user') as User['role'],
+    phone: data.phone || '',
+    city: data.city || 'Mumbai',
+    avatar: data.avatar || undefined,
+    companyName: data.company_name || undefined
+  };
+};
+
+export const updateCurrentUserProfile = async (updatedData: Partial<User>): Promise<User> => {
+  const { data: authData } = await supabase.auth.getUser();
+  if (!authData.user) throw new Error('You must be signed in.');
+  const payload = {
+    name: updatedData.name,
+    phone: updatedData.phone,
+    city: updatedData.city,
+    avatar: updatedData.avatar,
+    company_name: updatedData.companyName
+  };
+  const { data, error } = await supabase.from('profiles').update(payload).eq('id', authData.user.id).select().single();
+  if (error) throw error;
+  return {
+    id: data.id,
+    name: data.name || '',
+    email: data.email || authData.user.email || '',
+    role: (data.role || 'user') as User['role'],
+    phone: data.phone || '',
+    city: data.city || 'Mumbai',
+    avatar: data.avatar || undefined,
+    companyName: data.company_name || undefined
+  };
+};
+
+// ==========================================
 // 10. SUPABASE AUTHENTICATION ENGINE
 // ==========================================
 
@@ -783,6 +902,12 @@ export const supabaseAuth = {
     }
   },
 
+  async updatePassword(password: string) {
+    if (!isSupabaseConfigured()) return;
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+  },
+
   async getSession() {
     if (isSupabaseConfigured()) {
       const { data } = await supabase.auth.getSession();
@@ -828,7 +953,7 @@ export function mapSupabaseRowToProperty(row: any): Property {
     reraApproved: Boolean(row.rera_approved ?? true),
     reraId: row.rera_id || 'RERA-SUPA-2026-88',
     possessionStatus: row.possession_status || 'Ready to Move',
-    ownerId: row.owner_id || 'user-default',
+    ownerId: row.owner_id || undefined,
     ownerName: row.owner_name || 'Verified Agent',
     ownerPhone: row.owner_phone || '+91 98201 45678',
     status: row.status || 'active',
