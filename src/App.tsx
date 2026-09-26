@@ -1070,31 +1070,34 @@ export default function App() {
     const targetProp = properties.find(p => p.id === id);
     const wasSaved = savedIds.includes(id);
     const nextSaved = wasSaved ? savedIds.filter(item => item !== id) : [...savedIds, id];
-    setSavedIds(nextSaved);
 
     if (user?.id && targetProp) {
       try {
         await toggleUserSavedListing(user.id, targetProp);
+        setSavedIds(nextSaved);
         showToast(
           wasSaved
             ? `Removed "${targetProp.title}" from Supabase database`
             : `Saved "${targetProp.title}" directly to Supabase cloud database!`
         );
-        refreshActivityHistory();
-      } catch (err) {
-        console.warn('Failed to update Supabase saved listing:', err);
-        showToast(wasSaved ? 'Removed from saved properties' : 'Saved to favorites');
+        await refreshActivityHistory();
+      } catch (err: any) {
+        console.error('Failed to update Supabase saved listing:', err);
+        showToast(err?.message || 'Failed to update saved property in Supabase.');
       }
-    } else {
-      try {
-        localStorage.setItem('nestify_saved_ids', JSON.stringify(nextSaved));
-      } catch {}
-      showToast(
-        wasSaved
-          ? 'Removed from saved properties'
-          : 'Saved! Sign in with Supabase to sync across all devices.'
-      );
+      return;
     }
+
+    if (isSupabaseActive) {
+      showToast('Please sign in to save properties to Supabase.');
+      return;
+    }
+
+    setSavedIds(nextSaved);
+    try {
+      localStorage.setItem('nestify_saved_ids', JSON.stringify(nextSaved));
+    } catch {}
+    showToast(wasSaved ? 'Removed from saved properties' : 'Saved locally.');
   };
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
