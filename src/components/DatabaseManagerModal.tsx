@@ -95,109 +95,16 @@ export const DatabaseManagerModal: React.FC<DatabaseManagerModalProps> = ({
   };
 
   const handleCopySQL = () => {
-    const sqlContent = `-- NAVIKX SUPABASE COMPLETE DATABASE SCHEMA
--- Paste into Supabase SQL Editor and click 'Run'
+    const sqlContent = `Supabase database is already provisioned for this project.
+Tables: profiles, properties, saved_properties, activity_history, inquiries, bookings, valuations.
+Storage bucket: property-photos.
+Realtime: public.properties.
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
-CREATE TABLE IF NOT EXISTS public.properties (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    location TEXT NOT NULL,
-    locality TEXT,
-    city TEXT NOT NULL,
-    price NUMERIC NOT NULL,
-    price_display TEXT,
-    category TEXT NOT NULL DEFAULT 'office',
-    listing_type TEXT NOT NULL DEFAULT 'rent',
-    beds INTEGER DEFAULT 0,
-    baths INTEGER DEFAULT 1,
-    sqft NUMERIC NOT NULL DEFAULT 1000,
-    carpet_area NUMERIC,
-    furnishing TEXT DEFAULT 'Fully Furnished',
-    image TEXT NOT NULL,
-    gallery TEXT[] DEFAULT '{}',
-    description TEXT,
-    featured BOOLEAN DEFAULT true,
-    verified BOOLEAN DEFAULT true,
-    zero_brokerage BOOLEAN DEFAULT true,
-    rera_approved BOOLEAN DEFAULT true,
-    rera_id TEXT,
-    possession_status TEXT DEFAULT 'Ready to Move',
-    owner_id TEXT,
-    owner_name TEXT,
-    owner_phone TEXT,
-    status TEXT DEFAULT 'active',
-    amenities TEXT[] DEFAULT '{}',
-    coordinates JSONB DEFAULT '{"lat": 19.076, "lng": 72.8777}',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS public.saved_properties (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    property_id TEXT NOT NULL,
-    property_data JSONB,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS public.activity_history (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    action TEXT NOT NULL,
-    title TEXT NOT NULL,
-    details TEXT,
-    property_id TEXT,
-    property_title TEXT,
-    property_image TEXT,
-    timestamp TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS public.inquiries (
-    id TEXT PRIMARY KEY,
-    property_id TEXT NOT NULL,
-    property_title TEXT,
-    user_name TEXT NOT NULL,
-    user_email TEXT NOT NULL,
-    user_phone TEXT,
-    message TEXT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS public.bookings (
-    id TEXT PRIMARY KEY,
-    property_id TEXT NOT NULL,
-    property_title TEXT NOT NULL,
-    property_location TEXT NOT NULL,
-    user_name TEXT NOT NULL,
-    user_email TEXT NOT NULL,
-    user_phone TEXT,
-    preferred_date TEXT NOT NULL,
-    preferred_time TEXT NOT NULL,
-    tour_type TEXT NOT NULL,
-    status TEXT DEFAULT 'confirmed',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
-ALTER TABLE public.properties ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.saved_properties ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.activity_history ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.inquiries ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.bookings ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Allow public on properties" ON public.properties FOR ALL USING (true);
-CREATE POLICY "Allow public on saved_properties" ON public.saved_properties FOR ALL USING (true);
-CREATE POLICY "Allow public on activity_history" ON public.activity_history FOR ALL USING (true);
-CREATE POLICY "Allow public on inquiries" ON public.inquiries FOR ALL USING (true);
-CREATE POLICY "Allow public on bookings" ON public.bookings FOR ALL USING (true);
-
-ALTER PUBLICATION supabase_realtime ADD TABLE public.properties;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.saved_properties;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.activity_history;`;
+Do not run the legacy schema SQL from this UI; the live database has production RLS, UUID ownership, triggers, and storage policies already configured.`
 
     navigator.clipboard.writeText(sqlContent);
     setCopiedSQL(true);
-    onToast('Complete Supabase SQL Schema copied to clipboard!');
+    onToast('Current Supabase configuration summary copied to clipboard!');
     setTimeout(() => setCopiedSQL(false), 2500);
   };
 
