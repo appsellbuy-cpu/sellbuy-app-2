@@ -1128,6 +1128,9 @@ export default function App() {
       return;
     }
 
+    setPostStep(1);
+    setSearchTerm('');
+    setShowDropdown(false);
     setPostForm(prev => ({
       ...prev,
       ownerName: user?.name || prev.ownerName,
@@ -3569,9 +3572,11 @@ export default function App() {
                     <input
                       type="text"
                       placeholder="Search for a property..."
-                      value={searchTerm}
+                      value={postForm.title}
                       onChange={(e) => {
-                        setSearchTerm(e.target.value);
+                        const nextTitle = e.target.value;
+                        setPostForm({ ...postForm, title: nextTitle });
+                        setSearchTerm(nextTitle);
                         setShowDropdown(true);
                       }}
                       onFocus={() => setShowDropdown(true)}
