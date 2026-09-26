@@ -1262,7 +1262,8 @@ export default function App() {
       ? postForm.gallery
       : [postForm.image];
 
-    const cameraPhotoByUrl = new Map(capturedPhotos.map(photo => [photo.url, photo]));
+    const cameraPhotoByUrl = new Map<string, CapturedPhoto>();
+    capturedPhotos.forEach(photo => cameraPhotoByUrl.set(photo.url, photo));
 
     const newProp: Property = {
       id: `prop-${Date.now()}`,
