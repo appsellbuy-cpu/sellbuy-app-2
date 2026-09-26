@@ -1,12 +1,23 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Send, Phone, Mail, CheckCircle2, ShieldCheck, MessageSquare, MapPin } from 'lucide-react';
-import { Property } from '../types';
 import { submitPropertyInquiryToSupabase } from '../lib/supabase';
 import { useProperties } from '../context/PropertyContext';
 import { useAuth } from '../context/AuthContext';
 
+interface InquiryProperty {
+  id: string;
+  title: string;
+  location: string;
+  locality?: string;
+  image?: string;
+  price?: number;
+  priceDisplay?: string;
+  ownerId?: string;
+  ownerName?: string;
+}
+
 interface InquiryModalProps {
-  property: Property | null;
+  property: InquiryProperty | null;
   onClose: () => void;
 }
 
@@ -14,12 +25,18 @@ export const InquiryModal: React.FC<InquiryModalProps> = ({ property, onClose })
   const { showToast } = useProperties();
   const { user } = useAuth();
 
-  const [name, setName] = useState(user?.name || 'Alexander Wright');
-  const [email, setEmail] = useState(user?.email || 'appsellbuy@gmail.com');
-  const [phone, setPhone] = useState(user?.phone || '+91 98201 45678');
+  const [name, setName] = useState(user?.name || '');
+  const [email, setEmail] = useState(user?.email || '');
+  const [phone, setPhone] = useState(user?.phone || '');
   const [message, setMessage] = useState('Hi, I am interested in this property. Please contact me with more details.');
   const [inquiryType, setInquiryType] = useState<'Schedule Visit' | 'Price Negotiation' | 'Request Brochure' | 'Loan Assistance' | 'General Query'>('General Query');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    setName(user?.name || '');
+    setEmail(user?.email || '');
+    setPhone(user?.phone || '');
+  }, [user?.id]);
 
   if (!property) return null;
 
