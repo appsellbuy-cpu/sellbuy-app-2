@@ -1131,7 +1131,7 @@ export default function App() {
       phone: user?.phone || prev.phone,
       email: user?.email || prev.email
     }));
-    openPostPropertyFlow();
+    setShowPostModal(true);
   };
 
   const handleSavePreferences = async () => {
