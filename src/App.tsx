@@ -100,6 +100,48 @@ interface Property {
   coordinates?: { lat: number; lng: number };
 }
 
+const mapSupabasePropertyToAppProperty = (property: any): Property => ({
+  id: property.id,
+  title: property.title,
+  location: property.location,
+  city: property.city,
+  price: Number(property.price || 0),
+  priceDisplay: property.priceDisplay || `₹${Number(property.price || 0).toLocaleString('en-IN')}`,
+  type: property.category || 'Apartment',
+  purpose: property.listingType === 'rent' ? 'rent' : 'buy',
+  beds: Number(property.beds || 0),
+  baths: Number(property.baths || 0),
+  area: Number(property.sqft || 0),
+  rating: 4.9,
+  image: property.image,
+  gallery: property.gallery || [],
+  description: property.description || '',
+  featured: Boolean(property.featured),
+  reraId: property.reraId,
+  possession: property.possessionStatus,
+  floor: property.floor,
+  role: property.role,
+  furnishing: property.furnishing,
+  deposit: property.deposit == null ? undefined : Number(property.deposit),
+  coordinates: property.coordinates
+});
+
+const normalizePropertyCategory = (type: string): string => {
+  const value = type.toLowerCase();
+  if (value.includes('apartment') || value.includes('flat')) return 'apartment';
+  if (value.includes('villa')) return 'villa';
+  if (value.includes('house')) return 'house';
+  if (value.includes('penthouse')) return 'apartment';
+  if (value.includes('studio')) return 'apartment';
+  if (value.includes('pg') || value.includes('hostel') || value.includes('co-living')) return 'pg';
+  if (value.includes('office')) return 'office';
+  if (value.includes('commercial') || value.includes('shop') || value.includes('retail')) return 'commercial';
+  if (value.includes('factory') || value.includes('industrial')) return 'factory';
+  if (value.includes('godown') || value.includes('warehouse') || value.includes('logistics')) return 'godown';
+  if (value.includes('plot') || value.includes('land')) return 'plot';
+  return 'office';
+};
+
 const DEMO_PROPERTIES: Property[] = [
   {
     id: 'prop-1',
@@ -706,20 +748,14 @@ export default function App() {
         try {
           const supaSaved = await fetchUserSavedListings(user.id);
           if (isMounted) {
-            if (supaSaved && supaSaved.length > 0) {
-              setSavedIds(supaSaved.map(s => s.propertyId));
-            } else {
-              // Default demo saved IDs for initial experience
-              const defaultSaved = ['prop-1', 'prop-4'];
-              setSavedIds(defaultSaved);
-            }
+            setSavedIds(supaSaved.map(s => s.propertyId));
           }
         } catch (err) {
           console.warn('Supabase saved properties load error:', err);
         } finally {
           if (isMounted) setIsLoadingSaved(false);
         }
-      } else {
+      } else if (!isSupabaseActive) {
         // Anonymous guest fallback
         try {
           const guestSaved = localStorage.getItem('nestify_saved_ids');
@@ -727,12 +763,54 @@ export default function App() {
         } catch {
           setSavedIds(['prop-1', 'prop-4']);
         }
+      } else {
+        setSavedIds([]);
       }
     };
 
     loadSupabaseSaved();
     return () => { isMounted = false; };
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!isSupabaseActive) return;
+    let mounted = true;
+    const loadLiveProperties = async () => {
+      try {
+        const rows = await fetchPropertiesFromSupabase();
+        if (mounted) {
+          setProperties(rows.map(mapSupabasePropertyToAppProperty));
+        }
+      } catch (error) {
+        console.error('Failed to load live Supabase properties:', error);
+      }
+    };
+    void loadLiveProperties();
+
+    const subscription = subscribeToPropertiesRealtime(
+      property => {
+        if (!mounted) return;
+        setProperties(prev => {
+          const next = mapSupabasePropertyToAppProperty(property);
+          return [next, ...prev.filter(item => item.id !== next.id)];
+        });
+      },
+      property => {
+        if (!mounted) return;
+        const next = mapSupabasePropertyToAppProperty(property);
+        setProperties(prev => prev.map(item => item.id === next.id ? next : item));
+      },
+      deletedId => {
+        if (!mounted) return;
+        setProperties(prev => prev.filter(item => item.id !== deletedId));
+      }
+    );
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [isSupabaseActive]);
 
   // Modal Detail State & Media Tab
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
@@ -1106,7 +1184,7 @@ export default function App() {
     setContactSubmitted(false);
   };
 
-  const handlePostPropertySubmit = (e: React.FormEvent) => {
+  const handlePostPropertySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!postForm.title || !postForm.location || !postForm.price || !postForm.ownerName || !postForm.phone) {
       showToast('Please fill in all required property & contact details.');
@@ -1154,29 +1232,63 @@ export default function App() {
       furnishing: postForm.furnishing || 'Fully Furnished'
     };
 
-    const updated = [newProp, ...properties];
-    setProperties(updated);
-    try {
-      localStorage.setItem('nestify_properties', JSON.stringify(updated));
-    } catch {}
+    if (isSupabaseActive && !user?.id) {
+      showToast('Please sign in before posting a property.');
+      return;
+    }
 
-    // Persist property and photos directly to Supabase cloud database
-    (async () => {
+    try {
+      const saved = await savePropertyToSupabase({
+        id: newProp.id,
+        title: newProp.title,
+        location: newProp.location,
+        city: newProp.city,
+        price: newProp.price,
+        priceDisplay: newProp.priceDisplay,
+        category: normalizePropertyCategory(newProp.type),
+        listingType: newProp.purpose,
+        beds: newProp.beds,
+        baths: newProp.baths,
+        sqft: newProp.area,
+        carpetArea: newProp.area,
+        furnishing: newProp.furnishing,
+        image: newProp.image,
+        gallery: newProp.gallery,
+        description: newProp.description,
+        featured: newProp.featured,
+        reraId: newProp.reraId,
+        possessionStatus: newProp.possession,
+        floor: newProp.floor,
+        role: newProp.role,
+        deposit: newProp.deposit,
+        ownerId: user?.id,
+        ownerName: postForm.ownerName,
+        ownerPhone: postForm.phone,
+        verified: true,
+        zeroBrokerage: true,
+        postedBy: 'Owner',
+        status: 'active'
+      } as any, user);
+
+      const savedAppProperty = mapSupabasePropertyToAppProperty(saved);
+      setProperties(prev => [savedAppProperty, ...prev.filter(item => item.id !== savedAppProperty.id)]);
       try {
-        await savePropertyToSupabase(newProp as any, user);
-        if (user?.id) {
-          await recordUserActivity(
-            user.id,
-            'post_property',
-            `Listed "${newProp.title}" with ${finalGallery.length} camera photos in Supabase`,
-            newProp as any
-          );
-          refreshActivityHistory();
-        }
-      } catch (err) {
-        console.warn('Failed to save listing to Supabase database:', err);
+        localStorage.setItem('nestify_properties', JSON.stringify([savedAppProperty, ...properties.filter(item => item.id !== savedAppProperty.id)]));
+      } catch {}
+
+      if (user?.id) {
+        await recordUserActivity(
+          user.id,
+          'post_property',
+          'Listed "' + savedAppProperty.title + '" with ' + finalGallery.length + ' camera photos in Supabase',
+          saved as any
+        );
+        await refreshActivityHistory();
       }
-    })();
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to save listing to Supabase database.');
+      return;
+    }
 
     if (rentalReminderEnabled && newProp.purpose === 'rent' && matchesRentalCriteria(newProp)) {
       showListingAlertToast(newProp);
