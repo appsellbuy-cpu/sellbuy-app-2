@@ -232,64 +232,30 @@ export const seedInitialPropertiesToSupabase = async (): Promise<{ count: number
   if (!isSupabaseConfigured()) {
     return {
       count: INITIAL_PROPERTIES.length,
-      success: true,
-      message: 'Demo dataset cached locally. Connect Supabase credentials in .env to write directly to PostgreSQL.'
-    };
-  }
-
-  try {
-    const formattedRows = INITIAL_PROPERTIES.map(p => ({
-      id: p.id,
-      title: p.title,
-      location: p.location,
-      locality: p.locality || p.location,
-      city: p.city,
-      price: Number(p.price),
-      price_display: p.priceDisplay,
-      category: (p.category || 'office').toLowerCase(),
-      listing_type: p.listingType || 'rent',
-      beds: Number(p.beds) || 0,
-      baths: Number(p.baths) || 1,
-      sqft: Number(p.sqft) || 1200,
-      carpet_area: Number(p.carpetArea || p.sqft) || 1000,
-      furnishing: p.furnishing || 'Fully Furnished',
-      image: p.image,
-      gallery: p.gallery || [p.image],
-      description: p.description,
-      featured: Boolean(p.featured),
-      verified: Boolean(p.verified),
-      zero_brokerage: Boolean(p.zeroBrokerage),
-      rera_approved: Boolean(p.reraApproved),
-      rera_id: p.reraId || 'RERA-SUPA-SEED',
-      possession_status: p.possessionStatus || 'Ready to Move',
-      owner_id: p.ownerId || null,
-      owner_name: p.ownerName || 'Verified Agent',
-      owner_phone: p.ownerPhone || '+91 98201 45678',
-      status: 'active',
-      amenities: p.amenities || ['Power Backup', 'Security', 'Elevator'],
-      coordinates: p.coordinates || { lat: 19.076, lng: 72.8777 }
-    }));
-
-    const { error } = await supabase
-      .from('properties')
-      .upsert(formattedRows, { onConflict: 'id' });
-
-    if (error) {
-      throw error;
-    }
-
-    return {
-      count: formattedRows.length,
-      success: true,
-      message: `Successfully seeded ${formattedRows.length} premium properties into Supabase PostgreSQL database!`
-    };
-  } catch (err: any) {
-    return {
-      count: 0,
       success: false,
-      message: err?.message || 'Failed to seed database.'
+      message: 'Supabase is not configured in this environment.'
     };
   }
+
+  const { count, error } = await supabase
+    .from('properties')
+    .select('id', { count: 'exact', head: true });
+
+  if (error) throw error;
+
+  if ((count || 0) > 0) {
+    return {
+      count: count || 0,
+      success: true,
+      message: 'Supabase already contains ' + (count || 0) + ' properties. No demo overwrite was performed.'
+    };
+  }
+
+  return {
+    count: 0,
+    success: false,
+    message: 'Browser-side bulk seeding is disabled because property ownership must come from real Supabase Auth users. Use a controlled database seed/migration instead.'
+  };
 };
 
 // ==========================================
