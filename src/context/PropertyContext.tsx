@@ -10,7 +10,12 @@ import {
   fetchUserSavedListings,
   toggleUserSavedListing,
   recordUserActivity,
-  isSupabaseConfigured
+  isSupabaseConfigured,
+  fetchUserBookingsFromSupabase,
+  createViewingBookingRecord,
+  cancelViewingBookingInSupabase,
+  submitValuationToSupabase,
+  deletePropertyFromSupabase
 } from '../lib/supabase';
 
 interface PropertyContextType {
@@ -376,8 +381,12 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const loadBookings = useCallback(async () => {
     try {
-      const email = user?.email;
-      const data = await api.getBookings(email);
+      if (isSupabaseConfigured()) {
+        if (!user?.id) { setBookings([]); return; }
+        setBookings(await fetchUserBookingsFromSupabase(user.id));
+        return;
+      }
+      const data = await api.getBookings(user?.email, user?.id);
       setBookings(data);
     } catch (err) {
       console.warn('Failed to fetch bookings', err);
@@ -393,8 +402,10 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           return;
         }
       }
-      const data = await api.getSavedListings(user?.id, user?.email);
-      setSavedListings(data);
+      if (!isSupabaseConfigured()) {
+        const data = await api.getSavedListings(user?.id, user?.email);
+        setSavedListings(data);
+      }
     } catch (err) {
       console.warn('Failed to fetch saved listings', err);
     }
@@ -417,7 +428,11 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [savedListings]);
 
   const toggleFavorite = useCallback(async (property: Property): Promise<boolean> => {
-    const userId = user?.id || 'user-default';
+    if (isSupabaseConfigured() && !user?.id) {
+      showToast('Please sign in to save properties.');
+      return false;
+    }
+    const userId = user?.id || '';
     const wasSaved = savedListings.some(s => s.propertyId === property.id);
     
     // Optimistic UI update
@@ -442,8 +457,6 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const result = await toggleUserSavedListing(userId, property);
       setSavedListings(result.savedListings);
 
-      // 2. Also notify backend API
-      await api.toggleSavedListing(property.id, property, user?.id, user?.email);
       return result.isSaved;
     } catch (err) {
       console.warn('Failed to toggle favorite on server:', err);
@@ -463,7 +476,6 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (user?.id && target?.property) {
         await toggleUserSavedListing(user.id, target.property);
       }
-      await api.removeSavedListing(propertyId, user?.id, user?.email);
       return true;
     } catch (err) {
       console.warn('Failed to remove saved listing on server:', err);
@@ -613,12 +625,22 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const addProperty = async (propertyData: Partial<Property>): Promise<Property> => {
     setLoading(true);
     try {
+      if (isSupabaseConfigured()) {
+        if (!user?.id) throw new Error('Please sign in before posting a property.');
+        const created = await savePropertyToSupabase(
+          { ...propertyData, ownerId: user.id, ownerName: user.name, ownerPhone: user.phone },
+          user
+        );
+        setProperties(prev => {
+          const next = [created, ...prev.filter(p => p.id !== created.id)];
+          localStorage.setItem('navikx_properties', JSON.stringify(next));
+          return next;
+        });
+        showToast('Property "' + created.title + '" successfully listed!');
+        return created;
+      }
       const created = await api.createProperty(
-        {
-          ...propertyData,
-          ownerId: user?.id || 'user-default',
-          ownerName: user?.name || 'Alexander Wright'
-        },
+        { ...propertyData, ownerId: user?.id, ownerName: user?.name },
         token || undefined
       );
 
@@ -638,12 +660,17 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setLoading(true);
     try {
       let updated: Property;
-      try {
-        updated = await api.updateProperty(id, propertyData, token || undefined);
-      } catch {
-        // Fallback local update
+      if (isSupabaseConfigured()) {
+        if (!user?.id) throw new Error('Please sign in before editing a property.');
         const existing = properties.find(p => p.id === id);
-        updated = { ...(existing as Property), ...propertyData };
+        updated = await savePropertyToSupabase({ ...(existing || {}), ...propertyData, id }, user);
+      } else {
+        try {
+          updated = await api.updateProperty(id, propertyData, token || undefined);
+        } catch {
+          const existing = properties.find(p => p.id === id);
+          updated = { ...(existing as Property), ...propertyData };
+        }
       }
 
       setProperties(prev => {
@@ -666,10 +693,15 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const deleteProperty = async (id: string): Promise<boolean> => {
     setLoading(true);
     try {
-      try {
-        await api.deleteProperty(id, token || undefined);
-      } catch (err) {
-        console.warn('API delete failed, updating local state', err);
+      if (isSupabaseConfigured()) {
+        if (!user?.id) throw new Error('Please sign in before deleting a property.');
+        await deletePropertyFromSupabase(id);
+      } else {
+        try {
+          await api.deleteProperty(id, token || undefined);
+        } catch (err) {
+          console.warn('API delete failed, updating local state', err);
+        }
       }
 
       setProperties(prev => {
@@ -690,12 +722,41 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const addBooking = async (bookingData: Partial<ViewingBooking>): Promise<ViewingBooking> => {
-    const newBooking = await api.createBooking({
-      ...bookingData,
+    const newBooking: ViewingBooking = {
+      id: bookingData.id || 'book-' + Date.now(),
+      propertyId: bookingData.propertyId || '',
+      propertyTitle: bookingData.propertyTitle || '',
+      propertyLocation: bookingData.propertyLocation || '',
+      propertyCity: bookingData.propertyCity,
+      propertyImage: bookingData.propertyImage || '',
+      propertyPrice: Number(bookingData.propertyPrice || 0),
+      propertyListingType: bookingData.propertyListingType,
       userId: user?.id,
       userName: bookingData.userName || user?.name || 'Guest User',
-      userEmail: bookingData.userEmail || user?.email || 'guest@navikx.com'
-    });
+      userEmail: bookingData.userEmail || user?.email || 'guest@navikx.com',
+      userPhone: bookingData.userPhone || user?.phone || '',
+      preferredDate: bookingData.preferredDate || '',
+      preferredTime: bookingData.preferredTime || '11:00 AM',
+      tourType: bookingData.tourType || 'In-Person Visit',
+      notes: bookingData.notes || '',
+      status: bookingData.status || 'confirmed',
+      createdAt: bookingData.createdAt || new Date().toISOString()
+    };
+    if (isSupabaseConfigured()) {
+      if (!user?.id) throw new Error('Please sign in before booking a viewing.');
+      const property = properties.find(p => p.id === newBooking.propertyId);
+      if (!property) throw new Error('Property not found.');
+      newBooking.propertyTitle = newBooking.propertyTitle || property.title;
+      newBooking.propertyLocation = newBooking.propertyLocation || property.location;
+      newBooking.propertyCity = newBooking.propertyCity || property.city;
+      newBooking.propertyImage = newBooking.propertyImage || property.image;
+      newBooking.propertyPrice = newBooking.propertyPrice || property.price;
+      newBooking.propertyListingType = newBooking.propertyListingType || property.listingType;
+      await createViewingBookingRecord(newBooking);
+    } else {
+      const created = await api.createBooking(newBooking);
+      Object.assign(newBooking, created);
+    }
 
     setBookings(prev => [newBooking, ...prev]);
     showToast(`Viewing scheduled for ${newBooking.preferredDate}! Confirmation sent to ${newBooking.userEmail}.`);
@@ -703,15 +764,32 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const cancelBooking = async (id: string): Promise<boolean> => {
-    await api.cancelBooking(id);
+    if (isSupabaseConfigured()) await cancelViewingBookingInSupabase(id);
+    else await api.cancelBooking(id);
     setBookings(prev => prev.filter(b => b.id !== id));
     showToast('Viewing booking has been cancelled.');
     return true;
   };
 
   const submitValuation = async (data: { propertyType: string; location: string; name: string; email?: string; phone?: string; propertySize?: string }) => {
+    if (isSupabaseConfigured()) {
+      const sizeNum = Number(data.propertySize) || 1200;
+      const city = data.location || 'Mumbai';
+      const baseRatePerSqft = city.toLowerCase() === 'mumbai' ? 22000 : city.toLowerCase() === 'gurgaon' ? 14000 : city.toLowerCase() === 'bangalore' ? 11000 : 8500;
+      const estimatedValue = Math.round(sizeNum * baseRatePerSqft);
+      const estimatedRentVal = Math.round(estimatedValue * 0.0032);
+      const estimate = estimatedValue >= 10000000 ? '₹' + (estimatedValue / 10000000).toFixed(2) + ' Cr' : '₹' + (estimatedValue / 100000).toFixed(2) + ' Lakh';
+      const record: ValuationRequest = {
+        id: 'val-' + Date.now(), propertyType: data.propertyType, city, locality: city, name: data.name,
+        email: data.email, phone: data.phone, propertySize: data.propertySize, estimatedPrice: estimate,
+        estimatedRent: '₹' + estimatedRentVal.toLocaleString('en-IN') + '/month', createdAt: new Date().toISOString()
+      };
+      await submitValuationToSupabase(record);
+      showToast('Valuation calculated: Estimated value ' + estimate);
+      return { estimate };
+    }
     const res = await api.submitValuation(data);
-    showToast(`Valuation calculated: Estimated value ${res.estimate}`);
+    showToast('Valuation calculated: Estimated value ' + res.estimate);
     return res;
   };
 
