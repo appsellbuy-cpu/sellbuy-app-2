@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { X, Calculator, Sparkles, MapPin, Building2, CheckCircle2, TrendingUp, ShieldCheck, IndianRupee } from 'lucide-react';
 import { INDIAN_CITIES } from '../utils/formatters';
-import { api } from '../services/api';
 import { useProperties } from '../context/PropertyContext';
 
 interface PropertyValuationModalProps {
@@ -10,7 +9,7 @@ interface PropertyValuationModalProps {
 }
 
 export const PropertyValuationModal: React.FC<PropertyValuationModalProps> = ({ isOpen, onClose }) => {
-  const { showToast } = useProperties();
+  const { showToast, submitValuation } = useProperties();
 
   const [city, setCity] = useState('Mumbai');
   const [locality, setLocality] = useState('Bandra West');
@@ -35,15 +34,12 @@ export const PropertyValuationModal: React.FC<PropertyValuationModalProps> = ({ 
     setIsCalculating(true);
 
     try {
-      const res = await api.submitValuation({
-        city,
-        locality,
+      const res = await submitValuation({
+        location: city,
         propertyType,
-        bhk,
-        furnishing,
-        propertySize: size,
         name: userName || 'Valued User',
-        phone: userPhone
+        phone: userPhone,
+        propertySize: size
       });
 
       const sqft = Number(size) || 1000;
