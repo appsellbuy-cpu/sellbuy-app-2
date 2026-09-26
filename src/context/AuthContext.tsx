@@ -277,8 +277,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('Passwords cannot be empty');
     }
     if (isSupabaseActive) {
-      const { error } = await (await import('../lib/supabase')).supabase.auth.updateUser({ password: newPass });
-      if (error) throw error;
+      await supabaseAuth.updatePassword(newPass);
       return true;
     }
     await new Promise(resolve => setTimeout(resolve, 800));
