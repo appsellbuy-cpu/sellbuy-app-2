@@ -92,7 +92,7 @@ interface PropertyContextType {
   deleteProperty: (id: string) => Promise<boolean>;
   addBooking: (bookingData: Partial<ViewingBooking>) => Promise<ViewingBooking>;
   cancelBooking: (id: string) => Promise<boolean>;
-  submitValuation: (data: { propertyType: string; location: string; locality?: string; name: string; email?: string; phone?: string; propertySize?: string }) => Promise<{ estimate: string }>;
+  submitValuation: (data: { propertyType: string; location: string; locality?: string; name: string; email?: string; phone?: string; propertySize?: string; bhk?: string; furnishing?: string }) => Promise<{ estimate: string }>;
 }
 
 const PropertyContext = createContext<PropertyContextType | undefined>(undefined);
@@ -762,7 +762,7 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return true;
   };
 
-  const submitValuation = async (data: { propertyType: string; location: string; locality?: string; name: string; email?: string; phone?: string; propertySize?: string }) => {
+  const submitValuation = async (data: { propertyType: string; location: string; locality?: string; name: string; email?: string; phone?: string; propertySize?: string; bhk?: string; furnishing?: string }) => {
     if (isSupabaseConfigured()) {
       const sizeNum = Number(data.propertySize) || 1200;
       const city = data.location || 'Mumbai';
@@ -772,7 +772,7 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const estimate = estimatedValue >= 10000000 ? '₹' + (estimatedValue / 10000000).toFixed(2) + ' Cr' : '₹' + (estimatedValue / 100000).toFixed(2) + ' Lakh';
       const record: ValuationRequest = {
         id: 'val-' + Date.now(), propertyType: data.propertyType, city, locality: data.locality || city, name: data.name,
-        email: data.email, phone: data.phone, propertySize: data.propertySize, estimatedPrice: estimate,
+        email: data.email, phone: data.phone, propertySize: data.propertySize, bhk: data.bhk, furnishing: data.furnishing, estimatedPrice: estimate,
         estimatedRent: '₹' + estimatedRentVal.toLocaleString('en-IN') + '/month', createdAt: new Date().toISOString()
       };
       await submitValuationToSupabase(record);

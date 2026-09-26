@@ -18,7 +18,6 @@ import {
   RefreshCw,
   Eye
 } from 'lucide-react';
-import { uploadPropertyPhotoToSupabase } from '../lib/supabase';
 
 export interface CapturedPhoto {
   id: string;
@@ -32,7 +31,6 @@ export interface CapturedPhoto {
 interface CameraCaptureModalProps {
   isOpen: boolean;
   onClose: () => void;
-  propertyId?: string;
   onPhotosSaved: (photos: CapturedPhoto[], primaryUrl: string) => void;
   initialPhotos?: CapturedPhoto[];
 }
@@ -50,7 +48,6 @@ const ROOM_TAGS = [
 export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   isOpen,
   onClose,
-  propertyId = `prop-${Date.now()}`,
   onPhotosSaved,
   initialPhotos = []
 }) => {
@@ -261,33 +258,14 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     if (e.target) e.target.value = '';
   };
 
-  // Save all photos to Supabase Storage and link with listing
+  // Return captured photos to the listing form. The actual Supabase Storage
+  // upload happens after the final property ID is known, so files are never
+  // uploaded into a temporary/orphan listing path.
   const handleSaveAndConfirm = async () => {
     if (photos.length === 0) return;
 
     setIsUploadingToSupabase(true);
     try {
-      // Process photos through Supabase storage
-      const uploadedPhotos: CapturedPhoto[] = [];
-      for (const photo of photos) {
-        if (photo.url.startsWith('data:')) {
-          const uploadRes = await uploadPropertyPhotoToSupabase(photo.url, propertyId, photo.tag);
-          uploadedPhotos.push({
-            ...photo,
-            url: uploadRes.url
-          });
-        } else {
-          uploadedPhotos.push(photo);
-        }
-      }
-
-      const primaryPhoto = uploadedPhotos.find(p => p.isPrimary) || uploadedPhotos[0];
-      onPhotosSaved(uploadedPhotos, primaryPhoto.url);
-      stopCamera();
-      onClose();
-    } catch (err) {
-      console.warn('Error uploading photos to Supabase:', err);
-      // Fallback
       const primaryPhoto = photos.find(p => p.isPrimary) || photos[0];
       onPhotosSaved(photos, primaryPhoto.url);
       stopCamera();
@@ -560,7 +538,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
               </span>
               {photos.length > 0 && (
                 <span className="text-[10px] text-amber-400 font-bold bg-amber-400/10 px-2 py-0.5 rounded-md border border-amber-400/20">
-                  Ready for Supabase
+                  Ready to attach
                 </span>
               )}
             </div>
@@ -646,7 +624,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
               {isUploadingToSupabase ? (
                 <>
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>Syncing to Supabase Database...</span>
+                  <span>Attaching photos to listing...</span>
                 </>
               ) : (
                 <>

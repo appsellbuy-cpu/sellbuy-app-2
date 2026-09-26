@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useProperties } from '../context/PropertyContext';
 import { Property } from '../types';
 import { AIPresentationCopilot } from './AIPresentationCopilot';
+import { uploadPropertyPhotoToSupabase } from '../lib/supabase';
 import { 
   X, 
   Save, 
@@ -26,17 +27,18 @@ const JAIPUR_PRESETS = [
 ];
 
 interface EditPropertyModalProps {
-  property: Property | null;
+  property: Property | any | null;
   onClose: () => void;
+  onSaved?: (property: any) => void;
 }
 
-export const EditPropertyModal: React.FC<EditPropertyModalProps> = ({ property, onClose }) => {
+export const EditPropertyModal: React.FC<EditPropertyModalProps> = ({ property, onClose, onSaved }) => {
   const { updateProperty, showToast } = useProperties();
 
   const [title, setTitle] = useState('');
   const [location, setLocation] = useState('');
   const [price, setPrice] = useState('');
-  const [category, setCategory] = useState<'house' | 'apartment' | 'plot'>('house');
+  const [category, setCategory] = useState<string>('house');
   const [beds, setBeds] = useState('0');
   const [baths, setBaths] = useState('0');
   const [sqft, setSqft] = useState('0');
@@ -246,22 +248,44 @@ export const EditPropertyModal: React.FC<EditPropertyModalProps> = ({ property, 
 
     setIsSubmitting(true);
     try {
-      await updateProperty(property.id, {
+      const persistedGallery: string[] = [];
+      for (let i = 0; i < gallery.length; i += 1) {
+        const galleryImage = gallery[i];
+        if (galleryImage.startsWith('data:')) {
+          const upload = await uploadPropertyPhotoToSupabase(
+            galleryImage,
+            property.id,
+            `edit_${i + 1}`
+          );
+          persistedGallery.push(upload.url);
+        } else {
+          persistedGallery.push(galleryImage);
+        }
+      }
+
+      const finalGallery = persistedGallery.length > 0
+        ? persistedGallery
+        : [image || property.image];
+
+      const updated = await updateProperty(property.id, {
         title,
         location,
         price: Number(price),
-        category,
+        category: category as any,
         beds: category === 'plot' ? 0 : Number(beds),
         baths: category === 'plot' ? 0 : Number(baths),
         sqft: Number(sqft),
-        image: gallery[0] || image || property.image,
-        gallery: gallery.length > 0 ? gallery : [image || property.image],
+        image: finalGallery[0] || property.image,
+        gallery: finalGallery,
         virtualTourUrl: virtualTourUrl.trim() || undefined,
         description
       });
+
+      onSaved?.(updated);
       onClose();
     } catch (err) {
-      console.error(err);
+      console.error('Failed to save edited property:', err);
+      showToast(err instanceof Error ? err.message : 'Failed to save property changes.');
     } finally {
       setIsSubmitting(false);
     }
@@ -341,7 +365,7 @@ export const EditPropertyModal: React.FC<EditPropertyModalProps> = ({ property, 
 
             <div>
               <label className="text-[11px] font-bold uppercase tracking-wider text-gray-500 block mb-1">
-                Price ($ USD)
+                Price (₹)
               </label>
               <input
                 type="number"
