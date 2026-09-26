@@ -133,8 +133,7 @@ export const fetchPropertiesFromSupabase = async (): Promise<Property[]> => {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.warn('Supabase fetch error, fallback to initial properties:', error.message);
-      return INITIAL_PROPERTIES;
+      throw error;
     }
 
     if (data && data.length > 0) {
@@ -143,10 +142,10 @@ export const fetchPropertiesFromSupabase = async (): Promise<Property[]> => {
       return properties;
     }
 
-    return INITIAL_PROPERTIES;
+    return [];
   } catch (err) {
     console.error('Failed to fetch from Supabase:', err);
-    return INITIAL_PROPERTIES;
+    throw err;
   }
 };
 
@@ -328,7 +327,8 @@ export const uploadPropertyPhotoToSupabase = async (
           upsert: true
         });
 
-      if (!error && data) {
+      if (error) throw error;
+      if (data) {
         const { data: publicData } = supabase.storage
           .from('property-photos')
           .getPublicUrl(fileName);
@@ -339,10 +339,11 @@ export const uploadPropertyPhotoToSupabase = async (
       }
     }
   } catch (err) {
-    console.warn('Supabase storage upload fallback to direct image URL:', err);
+    console.error('Supabase storage upload failed:', err);
+    throw err;
   }
 
-  return { url: imageDataUrl, success: true, source: 'cloud_direct' };
+  throw new Error('Supabase Storage upload failed.');
 };
 
 // ==========================================
@@ -392,10 +393,11 @@ export const toggleUserSavedListing = async (
   if (exists) {
     const updated = currentSaved.filter(s => s.propertyId !== property.id);
     if (isSupabaseConfigured()) {
-      await supabase
+      const { error } = await supabase
         .from('saved_properties')
         .delete()
         .match({ user_id: userId, property_id: property.id });
+      if (error) throw error;
     }
     localStorage.setItem(`navikx_saved_listings_${userId}`, JSON.stringify(updated));
     recordUserActivity(userId, 'remove_saved', `Removed "${property.title}" from saved list`, property);
@@ -411,7 +413,7 @@ export const toggleUserSavedListing = async (
     const updated = [newEntry, ...currentSaved];
 
     if (isSupabaseConfigured()) {
-      await supabase
+      const { error } = await supabase
         .from('saved_properties')
         .insert({
           id: newEntry.id,
@@ -420,6 +422,7 @@ export const toggleUserSavedListing = async (
           property_data: property,
           created_at: newEntry.createdAt
         });
+      if (error) throw error;
     }
     localStorage.setItem(`navikx_saved_listings_${userId}`, JSON.stringify(updated));
     recordUserActivity(userId, 'save_property', `Saved "${property.title}" to favorites`, property);
@@ -553,9 +556,11 @@ export const submitPropertyInquiryToSupabase = async (inquiry: PropertyInquiry):
           status: inquiry.status,
           created_at: inquiry.createdAt
         });
-      if (!error) return true;
+      if (error) throw error;
+      return true;
     } catch (err) {
-      console.warn('Supabase inquiry insert error:', err);
+      console.error('Supabase inquiry insert error:', err);
+      throw err;
     }
   }
   return true;
@@ -590,9 +595,11 @@ export const createViewingBookingInSupabase = async (booking: ViewingBooking): P
           status: booking.status,
           created_at: booking.createdAt
         });
-      if (!error) return true;
+      if (error) throw error;
+      return true;
     } catch (err) {
-      console.warn('Supabase booking insert error:', err);
+      console.error('Supabase booking insert error:', err);
+      throw err;
     }
   }
   return true;
@@ -691,9 +698,11 @@ export const submitValuationToSupabase = async (val: ValuationRequest): Promise<
           estimated_rent: val.estimatedRent,
           created_at: val.createdAt
         });
-      if (!error) return true;
+      if (error) throw error;
+      return true;
     } catch (err) {
-      console.warn('Supabase valuation insert error:', err);
+      console.error('Supabase valuation insert error:', err);
+      throw err;
     }
   }
   return true;
